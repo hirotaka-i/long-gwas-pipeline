@@ -93,30 +93,32 @@ print( paste("Base survival model", basemod) )
 test_data <- matrix('', n_snps, 10)
 
 for (i in 1:n_snps) {
-  tmp.values <- unlist(tmp.split[[i]])
-  alt <- strsplit(tmp.values[4], '_')[[1]][1]
-  a1  <- strsplit(tmp.values[4], '_')[[1]][2]
-  marker.id <- paste(tmp.values[1],
-        tmp.values[2],
-        tmp.values[3],
-        alt,
-        sep=":")
+  parts <- unlist(tmp.split[[i]]) # expecting (chr, pos, ref, alt_a1)
+  ref <- parts[3]
+  alt_a1 <- strsplit(parts[4], '_', fixed=TRUE)[[1]]
+  alt <- alt_a1[1]
+  counted_raw  <- if (length(alt_a1) > 1) alt_a1[2] else ref # plink2 default counts ref
+  counted = sub("\\(.*$", "", counted_raw) # reformat in case 1:234356:A:T_A/(C)
   
-  a1_freq <- sum(snp_data[,i], na.rm=TRUE) / (sum(!is.na(snp_data[,i])) * 2)
-  miss_freq <- sum(is.na(snp_data[,i])) / length(snp_data[,i])
-  obs_ct <- sum(!is.na(snp_data[,i]))
+  marker.id <- paste(parts[1],parts[2], ref, alt, sep=":")
 
-  test_data[i,] <- c(tmp.values[1:2], 
-                     marker.id, 
-                     tmp.values[3], 
-                     alt, a1, 
-                     a1_freq, 
+  # recode to ALT dosage so β is per ALT (A1) allele
+  alt_counts <- if (counted == ref) 2 - snp_data[, i] else snp_data[, i]
+
+  obs_ct <- sum(!is.na(alt_counts))
+  alt_freq <- sum(alt_counts, na.rm=TRUE) / (obs_ct * 2)
+  miss_freq <- 1 - obs_ct / length(alt_counts)
+  
+  test_data[i,] <- c(parts[1:2], 
+                     marker.id,
+                     ref, alt, alt, # ref, alt, a1 (tested) 
+                     alt_freq, 
                      miss_freq, 
                      obs_ct, 
                      'CoxPH')
   
   # test SNP
-  data.geno$SNP <- snp_data[,i]
+  data.geno$SNP <- alt_counts
   data.mtx = merge( data.merged, data.geno, by='IID' )
   eq = paste0(basemod, "+", 'SNP')
   mdl = coxph(as.formula(eq), data=data.mtx)

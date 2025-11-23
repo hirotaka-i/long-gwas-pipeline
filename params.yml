@@ -1,8 +1,8 @@
 ---
-# Input files
-input: /home/amcalejandro/Data/WorkingDirectory/Development_Stuff/LONGWAS-NEXTFLOW/WORKSHOP/workdir/longitudinal-GWAS-pipeline/example/genotype/chr[1-3].vcf
-covarfile: /home/amcalejandro/Data/WorkingDirectory/Development_Stuff/LONGWAS-NEXTFLOW/WORKSHOP/workdir/longitudinal-GWAS-pipeline/example/covariates.tsv
-phenofile: /home/amcalejandro/Data/WorkingDirectory/Development_Stuff/LONGWAS-NEXTFLOW/WORKSHOP/workdir/longitudinal-GWAS-pipeline/example/phenotype.surv.tsv
+# Input files (using Nextflow ${projectDir} variable)
+input: "${projectDir}/example/genotype/example.vcf/chr[20-22].vcf"
+covarfile: "${projectDir}/example/covariates.tsv"
+phenofile: "${projectDir}/example/phenotype.surv.tsv"
 
 #Variables names
 pheno_name: surv_y

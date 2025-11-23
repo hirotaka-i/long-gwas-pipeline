@@ -11,10 +11,11 @@ CHRNUM=$5 # [1..22] Needed for lift over.
 FILE=$6 # Base file name. can be anything as long as unique
 ## e.g. process1.sh 2 '/data/CARD/PD/imputed_data/CORIELL/chr21.dose.vcf.gz' 0.3 hg19 21 chr21_cor
 
-# Resources (Make sure the paths are correct)
-# hg38 FASTQ reference will be passed in by nextflow
-FA=/srv/GWAS-Pipeline/References/Genome/hg38.fa.gz
-LIFTOVERDATA=/srv/GWAS-Pipeline/References/liftOver/${ASSEMBLY}ToHg38.over.chain.gz
+# Resources (Uses RESOURCE_DIR environment variable from nextflow.config profiles)
+# Default to Docker paths if RESOURCE_DIR not set (for backward compatibility)
+RESOURCE_DIR=${RESOURCE_DIR:-/srv/GWAS-Pipeline/References}
+FA=${RESOURCE_DIR}/Genome/hg38.fa.gz
+LIFTOVERDATA=${RESOURCE_DIR}/liftOver/${ASSEMBLY}ToHg38.over.chain.gz
 
 
 ######## start processing ###############################

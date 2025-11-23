@@ -59,7 +59,7 @@ process EXPORT_PLINK {
     path samplelist //from gwas_samplelist_plink.flatten()
     path x, stageAs: 'phenotypes.tsv' //from "${params.phenofile}"
   output:
-    path "*_analyzed.tsv" optional true //into plink_samplelist
+    path "*_analyzed.tsv", optional: true //into plink_samplelist
 
   script:
     //println "Samplelist: ${samplelist}"

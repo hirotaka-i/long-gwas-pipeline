@@ -55,7 +55,7 @@ include { SAVE_RESULTS }      from '../subworkflows/saveresults.nf'
  * Get the cache and the input check channels
  */
 Channel
-  .fromPath( "${STORE_DIR}/${params.dataset}/p1_run_cache/*" )
+  .fromPath( "${params.store_dir}/${params.dataset}/p1_run_cache/*", checkIfExists: false )
   .map{ f -> tuple(f.getSimpleName(), f) }
   .set{ cache }
 

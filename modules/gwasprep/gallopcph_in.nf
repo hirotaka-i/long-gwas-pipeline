@@ -30,7 +30,7 @@ process GALLOPCOX_INPUT {
         if start is None:
           start = vid
 
-        if count >= ${params.plink_chunk_size}:
+        if count >= ${params.chunk_size}:
           end = vid
           id_pairs.append( (start, end) )
           start = None

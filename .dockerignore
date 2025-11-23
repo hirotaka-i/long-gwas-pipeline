@@ -1,0 +1,37 @@
+# Docker build context exclusions
+# Only docker/build-artifacts/ and References/ are needed for building
+
+# Nextflow working directories
+work/
+.nextflow/
+.nextflow.*
+
+# Example data (not needed in image)
+example/
+
+# Documentation (not needed in image)
+docs/
+*.md
+!docker/build-artifacts/README.md
+
+# Development files
+.git/
+.gitignore
+.vscode/
+
+# Pipeline files (only download_references.sh needed in image for reference setup)
+workflows/
+modules/
+subworkflows/
+
+# Config files (mounted at runtime)
+nextflow.config
+params.yml
+
+# Test files
+test_*.sh
+*.log
+
+# Output directories
+files/
+results/

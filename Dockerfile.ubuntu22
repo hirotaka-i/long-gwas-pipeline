@@ -1,0 +1,157 @@
+# Dockerfile for long-GWAS pipeline - Ubuntu 22.04
+# Simplified modern version with Python 3.10 and R 4.x
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH=/usr/local/bin:$PATH
+ENV PYTHONPATH=/usr/local/bin
+
+# Install all system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates netbase wget curl unzip git \
+    build-essential cmake gcc g++ make \
+    python3.10 python3-pip python3.10-dev \
+    r-base r-base-dev \
+    libc6-dev zlib1g-dev libbz2-dev libgsl-dev \
+    libperl-dev liblzma-dev libcurl4-openssl-dev \
+    libssl-dev libncurses5-dev tabix \
+    software-properties-common dirmngr gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python symlinks
+RUN cd /usr/bin && ln -sf python3.10 python && ln -sf python3.10 python3
+
+# Upgrade pip
+RUN pip3 install --no-cache-dir --upgrade pip
+
+# Install R packages from CRAN (latest stable versions)
+# Note: R 4.1.2 typically gets survival ~3.8.x, optparse ~1.7.x
+# MOVED EARLY: R packages are slow to install but stable (rarely change)
+RUN Rscript -e 'install.packages(c("survival", "optparse"), repos="https://cloud.r-project.org")'
+
+# ============================================
+# Google Cloud SDK - SLOW but STABLE
+# Install early to maximize cache efficiency
+# ============================================
+
+# Add Google Cloud SDK GPG key (modern approach for Ubuntu 22.04)
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+        | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+
+# Add Google Cloud SDK repository
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" \
+        | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+
+# Install Google Cloud SDK
+RUN apt-get update && apt-get install -y google-cloud-cli && \
+    rm -rf /var/lib/apt/lists/*
+
+# ============================================
+# Compiled bioinformatics tools - MODERATE speed, STABLE
+# ============================================
+
+# Download and compile bcftools
+RUN wget -qO- https://github.com/samtools/bcftools/releases/download/1.11/bcftools-1.11.tar.bz2 | tar -xj -C /usr/src
+
+# Compile and install bcftools
+RUN cd /usr/src/bcftools-1.11 && \
+    ./configure --enable-libgsl --enable-perl-filters && \
+    make && make install && \
+    rm -rf /usr/src/bcftools-1.11
+
+# Download METAL source
+RUN wget -qO- https://github.com/statgen/METAL/archive/refs/tags/2020-05-05.tar.gz | tar -xz -C /usr/src/
+
+# Compile and install METAL
+RUN cd /usr/src/METAL-2020-05-05 && mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release .. && make && make install && \
+    ln -s /usr/src/METAL-2020-05-05/build/bin/metal /usr/local/bin/metal
+
+# Install bedtools
+RUN wget -qO /usr/local/bin/bedtools https://github.com/arq5x/bedtools2/releases/download/v2.30.0/bedtools.static.binary && \
+    chmod +x /usr/local/bin/bedtools
+
+# ============================================
+# Binary tools and reference data - FAST, STABLE
+# ============================================
+
+# Install plink, plink2, gcta
+COPY docker/build-artifacts/plink2_linux_x86_64_20210920.zip /root/
+COPY docker/build-artifacts/plink_linux_x86_64_20210606.zip /root/
+COPY docker/build-artifacts/gcta_1.93.2beta.zip /root/
+COPY docker/build-artifacts/liftOver_20250627.zip /root/
+
+# Extract and install plink tools
+RUN cd /root && \
+    unzip plink2_linux_x86_64_20210920.zip && \
+    unzip plink_linux_x86_64_20210606.zip && \
+    unzip gcta_1.93.2beta.zip && \
+    unzip liftOver_20250627.zip && \
+    mv plink2 plink prettify /usr/local/bin/ && \
+    mv gcta_1.93.2beta/gcta64 /usr/local/bin/ && \
+    mv liftOver_20250627 /usr/local/bin/liftOver && \
+    chmod +x /usr/local/bin/liftOver && \
+    rm -rf *.zip gcta_1.93.2beta
+
+# Download reference files (required for pipeline operation)
+# These are large files but necessary for liftOver and normalization
+RUN mkdir -p /srv/GWAS-Pipeline/References/Genome && \
+    mkdir -p /srv/GWAS-Pipeline/References/liftOver && \
+    mkdir -p /srv/GWAS-Pipeline/References/ref_panel && \
+    wget -q -O /srv/GWAS-Pipeline/References/Genome/hg38.fa.gz \
+        "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz" && \
+    wget -q -O /srv/GWAS-Pipeline/References/liftOver/hg19ToHg38.over.chain.gz \
+        "https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz" && \
+    wget -q -O /srv/GWAS-Pipeline/References/liftOver/hg18ToHg38.over.chain.gz \
+        "https://hgdownload.cse.ucsc.edu/goldenpath/hg18/liftOver/hg18ToHg38.over.chain.gz"
+
+# Copy and extract ancestry reference panel
+COPY References/ancestry_ref_panel.tar.gz /root/
+RUN tar -xzf /root/ancestry_ref_panel.tar.gz -C /srv/GWAS-Pipeline/References/ref_panel --no-same-owner && \
+    rm /root/ancestry_ref_panel.tar.gz
+
+# ============================================
+# Python packages - Ordered by: SLOW/STABLE first, FAST/DEBUG-PRONE last
+# This maximizes Docker layer cache efficiency during development
+# ============================================
+
+# Install numpy 1.26.0 first (required by pandas 2.x)
+# Note: Upgrading from 1.24.3 to 1.26.0 to fix pandas 2.x compatibility
+RUN pip install --no-cache-dir 'numpy==1.26.0'
+
+# Install scipy with numpy 1.26.0 (rebuild for binary compatibility)
+RUN pip install --no-cache-dir 'scipy==1.10.1'
+
+# Install GenoTools from PyPI (SLOW ~60s, but STABLE - moved early for cache)
+# Pinned version for reproducibility
+RUN pip install --ignore-installed the-real-genotools==1.3.5
+
+# Install GALLOP dependencies (statsmodels for LME)
+RUN pip install statsmodels==0.13.5
+
+# Install qmplot and plotly for visualization (pinned versions)
+# Constrain pandas to 2.1.x range (2.3.3 has read_csv bugs with numpy arrays)
+# User's local environment: pandas=2.1.4, numpy=1.26.3 works fine
+RUN pip install 'pandas>=2.1.0,<2.2.0' qmplot==0.3.3 plotly==5.23.0 kaleido==0.2.1
+
+# Final numpy/scipy reinstall to ensure compatibility after all pip installs
+# Using numpy 1.26.0 for pandas 2.x compatibility
+# KEEP THIS LAST: Quick rebuild (3s) for debugging dependency issues
+RUN pip install --force-reinstall --no-cache-dir --no-deps 'numpy==1.26.0' 'scipy==1.10.1'
+
+# Install PyTables for HDF5 support (required by addi_qc_pipeline.py)
+# Installed last as a separate layer for easy cache reuse
+RUN pip install --no-cache-dir tables
+
+# NOTE: bin/ scripts are NOT copied into the Docker image
+# Nextflow automatically mounts the local bin/ directory to /workspace/bin/ inside containers
+# This allows you to modify scripts without rebuilding the Docker image
+# The scripts are mounted at runtime when using any Nextflow profile (standard or localtest)
+
+WORKDIR /workspace
+
+# Verify all tools
+RUN python3 --version && R --version && plink2 --version && \
+    bcftools --version && gsutil version && \
+    Rscript -e "library(survival); library(optparse); cat('✅ All installed!\n')"

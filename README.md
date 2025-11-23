@@ -4,20 +4,7 @@ Repository for Nextflow pipeline to perform GWAS with longitudinal capabilities
 
 ## Overview
 
-This pipeline supports three types of genetic assoc## Documentation
-
-### For Users
-- 🚀 **[Quick Start](#quick-start)**: Installation and basic usage (see above)
-- 📋 **[Parameters](docs/parameters.md)**: Complete parameter reference
-- 📊 **[File Formats](docs/file_formats.md)**: Comprehensive input/output file format specifications
-- 📝 **[Examples](docs/examples.md)**: Practical usage examples with params.yml
-- 🔧 **[Configuration & Profiles](docs/config.md)**: Execution environments and resource management
-
-### For Developers
-- 📖 **[Docker Improvements](docs/DOCKER_IMPROVEMENTS.md)**: Complete guide including software versions, pandas/numpy fixes, and build optimization
-- 🏗️ **[Repository Guide](docs/REPOSITORY_GUIDE.md)**: Complete architecture and code organization guide
-- ⚡ **[Quick Reference](docs/QUICK_REFERENCE.md)**: Fast lookup for common tasks and troubleshooting
-- 🔬 **[Reference Files Setup](docs/REFERENCE_FILES_SETUP.md)**: Reference file architecture and setups:
+This pipeline supports three types of genetic association analyses:
 - **Cross-sectional** (GLM): Standard GWAS with single time-point phenotypes
 - **Longitudinal** (GALLOP/LMM): Repeated measures analysis with time-varying phenotypes
 - **Survival** (Cox PH): Time-to-event analysis

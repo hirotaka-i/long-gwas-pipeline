@@ -120,111 +120,72 @@ nextflow run main.nf -profile standard -params-file params.yml \
 
 See [Examples](docs/examples.md) for detailed use cases.
 
-## Developer's Guide
+## Quick Tips
 
-### What changes are reflected immediately (no rebuild needed):
+### For Users
 
-✅ **Scripts in `bin/` directory**
-- Nextflow automatically mounts `bin/` into containers
-- Modify any `.py`, `.sh`, or `.R` script and run immediately
-- Examples: `manhattan.py`, `process1.sh`, `qc.py`, `gallop.py`
+- Use `standard` profile for production analyses
+- See [Examples](docs/examples.md) for common workflows
+- Check [Parameters](docs/parameters.md) for all configuration options
 
-✅ **Workflow files**
-- `workflows/*.nf`
-- `subworkflows/*.nf`  
-- `modules/**/*.nf`
+### For Developers
 
-### What requires Docker rebuild:
+Scripts in `bin/` and workflow files (`*.nf`) can be edited directly - changes take effect immediately without rebuilding Docker.
 
-🔧 **Package installations and software updates**
-- Python packages (pip install)
-- R packages
-- System packages (apt-get)
-- Bioinformatics tools (plink, bcftools, etc.)
+For package installations or Docker modifications, see the [Developer's Guide](docs/DEVELOPER_GUIDE.md).
 
-**To rebuild:**
-```bash
-docker build --platform linux/amd64 -f Dockerfile.ubuntu22 -t longgwas-local-test .
-```
-
-> **Note for Apple Silicon (M1/M2/M3) users**: Always use `--platform linux/amd64` flag when building. The pipeline uses x86_64 binaries (liftOver, plink, etc.) that require amd64 platform.
-
-### Pushing Docker updates
-
-Once your modifications work with the local Docker image:
-
-1. **Tag the image:**
-   ```bash
-   docker tag longgwas-local-test yourusername/longgwas:v3
-   ```
-
-2. **Push to DockerHub:**
-   ```bash
-   docker push yourusername/longgwas:v3
-   ```
-
-3. **Update `nextflow.config`:**
-   ```groovy
-   process.container = 'yourusername/longgwas:v3'
-   ```
-
-### Current Docker Images
-
-- ✅ **`amcalejandro/longgwas:v2`**: Stable production version (built from original `Dockerfile`)
-- 🚧 **`Dockerfile.ubuntu22`**: Modern Ubuntu 22.04 build with optimizations (in testing)
+> **Apple Silicon users**: Always use `--platform linux/amd64` when building Docker images
 
 ## Documentation
 
 ### For Users
-- � **[Getting Started](docs/getting_started.md)**: Detailed quickstart guide
-- 📋 **[Parameters](docs/parameters.md)**: Description of all pipeline parameters
-- 📊 **[File Formats](docs/file_formats.md)**: Input/output file format specifications
+- 📋 **[Parameters](docs/parameters.md)**: All pipeline parameters and options
+- 📊 **[File Formats](docs/file_formats.md)**: Input/output file specifications
 - 📝 **[Examples](docs/examples.md)**: Example workflows and use cases
-- 🔧 **[Configuration](docs/config.md)**: Detailed Nextflow configuration guide
-- 💻 **[Software](docs/software.md)**: List of included bioinformatics tools
+- 🔧 **[Configuration](docs/config.md)**: Profile and resource configuration
+- ⚡ **[Quick Reference](docs/QUICK_REFERENCE.md)**: Fast lookup for common tasks
 
 ### For Developers
-- � **[Docker Improvements](docs/DOCKER_IMPROVEMENTS.md)**: Complete guide to Dockerfile.ubuntu22 improvements, pandas/numpy fixes, and build optimization
-- 🏗️ **[Repository Guide](docs/REPOSITORY_GUIDE.md)**: Complete architecture and code organization guide
-- ⚡ **[Quick Reference](docs/QUICK_REFERENCE.md)**: Fast lookup for common tasks and troubleshooting
+- 🚀 **[Developer's Guide](docs/DEVELOPER_GUIDE.md)**: Complete development workflow, Docker builds, testing, and deployment
+- 🐳 **[Docker Improvements](docs/DOCKER_IMPROVEMENTS.md)**: Dockerfile.ubuntu22 architecture and optimizations
+- 🏗️ **[Repository Guide](docs/REPOSITORY_GUIDE.md)**: Code organization and architecture
+- 📖 **[Reference Files Setup](docs/REFERENCE_FILES_SETUP.md)**: Managing genome references and resources
 
 ## Architecture Notes
 
 ### Nextflow bin/ Auto-Mounting
-Nextflow automatically mounts your project's `bin/` directory into Docker containers at `/workspace/bin/` and adds it to PATH. This means:
-- Scripts in `bin/` override any copies inside the Docker image
-- You can modify scripts without rebuilding Docker
-- The Docker image doesn't need to include `bin/` scripts (they're mounted at runtime)
+Nextflow automatically mounts your project's `bin/` directory into containers and adds it to PATH. This means you can modify Python, R, and shell scripts without rebuilding Docker. See the [Developer's Guide](docs/DEVELOPER_GUIDE.md) for details.
 
 ### Reference Files
 The Docker image includes large reference files (~900 MB) required for the pipeline:
-- `hg38.fa.gz`: Human genome reference (for normalization)
-- `hg19ToHg38.over.chain.gz`: Liftover chain file (hg19 → hg38)
-- `hg18ToHg38.over.chain.gz`: Liftover chain file (hg18 → hg38)
+- `hg38.fa.gz`: Human genome reference
+- `hg19ToHg38.over.chain.gz` / `hg18ToHg38.over.chain.gz`: Liftover chain files
 - Ancestry reference panel (1000 Genomes)
 
-These are built into the Docker image to ensure availability without external downloads during pipeline execution.
+See [Reference Files Setup](docs/REFERENCE_FILES_SETUP.md) for details.
 
 ## Troubleshooting
 
 ### Common Issues
 
-**1. Permission denied on scripts**
+**Permission denied on scripts**
 ```bash
-chmod +x bin/*.py bin/*.sh
+chmod +x bin/*.py bin/*.sh bin/*.R
 ```
 
-**2. Platform mismatch on Apple Silicon**
-Always use `--platform linux/amd64` when building:
+**Platform mismatch on Apple Silicon**
 ```bash
 docker build --platform linux/amd64 -f Dockerfile.ubuntu22 -t longgwas-local-test .
 ```
 
-**3. Missing Python modules**
-If you see `ModuleNotFoundError`, the Docker image needs to be rebuilt with the missing package added to `Dockerfile.ubuntu22`.
+**Pipeline errors**
+Check the detailed logs:
+```bash
+cat .nextflow.log
+cat work/XX/XXXXXXXXX/.command.log
+```
 
-**4. liftOver errors**
-Ensure the Docker image was built for `linux/amd64` platform (not `arm64`).
+For complete troubleshooting guide, see [Developer's Guide](docs/DEVELOPER_GUIDE.md#troubleshooting).
 
 ## Citation
 
@@ -239,4 +200,4 @@ If you use this pipeline, please cite:
 
 For issues and questions:
 - 🐛 **Bug reports**: [GitHub Issues](https://github.com/hirotaka-i/long-gwas-pipeline/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/hirotaka-i/long-gwas-pipeline/discussions) 
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/hirotaka-i/long-gwas-pipeline/discussions)

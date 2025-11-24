@@ -42,7 +42,7 @@ Output: Association statistics + Manhattan plots
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/hirotaka-i/long-gwas-pipeline.git
+   git clone -b v2 https://github.com/hirotaka-i/long-gwas-pipeline.git
    cd long-gwas-pipeline
    ```
 
@@ -67,6 +67,15 @@ nextflow run main.nf -profile standard -params-file params.yml
 - **Docker image**: `amcalejandro/longgwas:v2` (stable, production-ready)
 - **Scripts**: Uses your local `bin/` directory (auto-mounted by Nextflow)
 - **No build required**: Just pull and run
+
+*TIPS*: When first attempt failed, you can resume where it failed with
+```
+nextflow run main.nf -profile standard -params-file params.yml -resume
+```
+Also, you can display the flowchart. 
+```
+nextflow run main.nf -profile standard -params-file params.yml -with-dag flowchart.html
+```
 
 ### 2. `localtest` (For developers)
 Uses a locally built Docker image for testing modifications:

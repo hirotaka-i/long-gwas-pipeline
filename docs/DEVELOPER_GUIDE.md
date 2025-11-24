@@ -493,53 +493,132 @@ nextflow run main.nf -profile biowulf -params-file params.yml
 
 ### Biowulf-Specific Configuration
 
-From `nextflow.config` (lines 145-195):
+Biowulf provides **two profiles** for different use cases:
+
+#### **Profile 1: `biowulf` - SLURM Job Submission (Recommended)**
+
+For running from the **login node** - each task becomes a separate SLURM job:
 
 ```groovy
 biowulf {
   params {
-    store_dir = "$LONG_GWAS_DIR/Data/Cache"
+    store_dir = "$LONG_GWAS_DIR/$PROJECT_NAME/Cache"
   }
   env {
-    RESOURCE_DIR = '/files'
     OUTPUT_DIR = "$LONG_GWAS_DIR/$PROJECT_NAME/results"
-    STORE_DIR = "$LONG_GWAS_DIR/Data/Cache"
-    ADDI_QC_PIPELINE = '/usr/src/ADDI-GWAS-QC-pipeline/addi_qc_pipeline.py'
+    STORE_DIR = "$LONG_GWAS_DIR/$PROJECT_NAME/Cache"
   }
   process {
+    executor = 'slurm'
+    queue = 'norm'
     container = "$LONG_GWAS_DIR/Docker/gwas-pipeline_survival.sif"
     
     withLabel: small {
       cpus = 2
       memory = '5 GB'
+      time = '2h'
     }
     withLabel: medium {
       cpus = 2
       memory = '15 GB'
+      time = '4h'
     }
     withLabel: large_mem {
       cpus = 10
       memory = '115 GB'
+      time = '8h'
     }
   }
   executor {
-    cpus = 20
-    name = 'local'
-    memory = '125 GB'
+    name = 'slurm'
+    pollInterval = '2 min'
+    queueSize = 200
+    queueStatInterval = '5 min'
+    submitRateLimit = '6/1min'
   }
   singularity {
     enabled = true
-    temp = 'auto'
+    autoMounts = true
     runOptions = "--bind $PWD --env APPEND_PATH=$PWD/bin"
   }
 }
 ```
 
-**Key differences from local Docker:**
-- Uses **Singularity** instead of Docker
+**Usage:**
+```bash
+# From login node (NOT sinteractive!)
+ssh biowulf.nih.gov
+module load nextflow singularity
+export LONG_GWAS_DIR=/data/username/gwas
+export PROJECT_NAME=my-analysis
+
+nextflow run main.nf -profile biowulf -params-file params.yml
+
+# Check submitted jobs
+squeue -u $USER
+```
+
+**Key features:**
+- Uses **SLURM executor** - each task submits a separate SLURM job
+- Jobs run on compute nodes (not login node)
+- Follows [Biowulf's official recommendations](https://hpc.nih.gov/apps/nextflow.html)
+- Proper resource management with time limits
+
+#### **Profile 2: `biowulflocal` - Local Execution (For allocated resources)**
+
+For running **within sinteractive or sbatch** - uses already allocated resources:
+
+```groovy
+biowulflocal {
+  params {
+    store_dir = "$LONG_GWAS_DIR/$PROJECT_NAME/Cache"
+  }
+  env {
+    OUTPUT_DIR = "$LONG_GWAS_DIR/$PROJECT_NAME/results"
+    STORE_DIR = "$LONG_GWAS_DIR/$PROJECT_NAME/Cache"
+  }
+  process {
+    executor = 'local'
+    container = "$LONG_GWAS_DIR/Docker/gwas-pipeline_survival.sif"
+    maxForks = 2  // Limits parallel tasks
+    
+    withLabel: large_mem {
+      cpus = 2
+      memory = '50 GB'
+    }
+  }
+  singularity {
+    enabled = true
+    autoMounts = true
+  }
+}
+```
+
+**Usage:**
+```bash
+# Allocate resources first
+sinteractive --cpus-per-task=4 --mem=50g
+
+# Then run pipeline
+module load nextflow singularity
+export LONG_GWAS_DIR=/data/username/gwas
+export PROJECT_NAME=my-analysis
+
+nextflow run main.nf -profile biowulflocal -params-file params.yml
+```
+
+**Key features:**
+- Uses **local executor** - runs on your allocated node
+- Does NOT submit new SLURM jobs
+- `maxForks = 2` prevents spawning too many processes
+- Suitable for interactive testing
+
+#### **Key Differences from Local Development:**
+- Uses **Singularity** instead of Docker (HPC security requirement)
 - Much larger resources (115 GB for large_mem vs 12 GB local)
-- Requires environment variables set
+- Requires environment variables: `$LONG_GWAS_DIR`, `$PROJECT_NAME`
 - Uses `.sif` file instead of Docker image
+- SLURM executor for proper HPC job management
 
 ---
 
@@ -650,8 +729,14 @@ module load singularity
 singularity build $LONG_GWAS_DIR/Docker/gwas-pipeline_survival.sif \
   docker://your-username/longgwas:v3
 
-# 10. Test on Biowulf
+# 10. Test on Biowulf (from login node - submits SLURM jobs)
+module load nextflow
 nextflow run main.nf -profile biowulf -params-file params.yml
+
+# OR test interactively (from allocated node)
+sinteractive --cpus-per-task=4 --mem=50g
+module load nextflow singularity
+nextflow run main.nf -profile biowulflocal -params-file params.yml
 ```
 
 ### Version Tagging Strategy

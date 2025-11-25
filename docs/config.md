@@ -372,6 +372,7 @@ nextflow run main.nf -profile adwb -params-file params.yml
 **Best for:** NIH Biowulf HPC cluster - submitting SLURM jobs from login node
 
 **Preparation:**
+clone repository to your working directory on Biowulf.
 
 **Configuration:**
 ```groovy
@@ -421,8 +422,8 @@ biowulf {
 
 **Setup:**
 ```bash
-# From login node (NOT sinteractive!)
-export LONG_GWAS_DIR=/data/username/gwas
+sinteractive --cpus-per-task=2 --mem=100g
+export LONG_GWAS_DIR=$PWD # or /path/to/cloned/directory
 export PROJECT_NAME=my_study
 module load nextflow singularity
 ```
@@ -481,8 +482,7 @@ biowulflocal {
 
 **Setup:**
 ```bash
-# Allocate resources first
-sinteractive --cpus-per-task=4 --mem=50g
+# The same setup as biowulf profile
 
 # Then run pipeline
 module load nextflow singularity

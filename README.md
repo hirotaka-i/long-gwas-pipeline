@@ -38,6 +38,52 @@ Output: Association statistics + Manhattan plots
   - Docker Desktop (Mac/Windows) or Docker Engine (Linux)
   - OR Singularity/Apptainer (HPC environments)
 
+### Directory Structure
+
+The pipeline uses a standardized directory structure across all profiles:
+
+```
+$LONG_GWAS_DIR/
+└── $PROJECT_NAME/
+    ├── cache/           # Persistent cache for genetic QC (p1_run_cache/)
+    ├── results/         # Final GWAS results and plots
+    └── work/            # Nextflow work directory (temporary, cloud profiles only)
+```
+
+**Environment variables:**
+- `LONG_GWAS_DIR`: Root directory for all pipeline data (default: `$PWD`)
+- `PROJECT_NAME`: Unique identifier for your project (default: `unnamed_project`)
+
+**Examples:**
+```bash
+# Local execution (defaults to current directory)
+nextflow run main.nf -profile standard -params-file params.yml
+# → Output: $PWD/unnamed_project/{cache,results}
+
+# Set custom project name
+export PROJECT_NAME="my_gwas_2025"
+nextflow run main.nf -profile standard -params-file params.yml
+# → Output: $PWD/my_gwas_2025/{cache,results}
+
+# Custom base directory and project name
+export LONG_GWAS_DIR="/data/gwas_projects"
+export PROJECT_NAME="parkinsons_study"
+nextflow run main.nf -profile standard -params-file params.yml
+# → Output: /data/gwas_projects/parkinsons_study/{cache,results}
+
+# Biowulf HPC
+export LONG_GWAS_DIR="/data/$USER/gwas"
+export PROJECT_NAME="cohort_analysis"
+nextflow run main.nf -profile biowulf -params-file params.yml
+# → Output: /data/$USER/gwas/cohort_analysis/{cache,results}
+
+# Google Cloud
+export LONG_GWAS_DIR="gs://my-bucket/gwas"
+export PROJECT_NAME="multi_cohort_2025"
+nextflow run main.nf -profile gls -params-file params.yml
+# → Output: gs://my-bucket/gwas/multi_cohort_2025/{cache,results,work}
+```
+
 ### Installation
 
 1. **Clone the repository:**
@@ -86,6 +132,7 @@ For detailed information on available profiles and their configurations, see the
   ```
 
 ## Analysis Types
+NOTE: Options are set in the `params.yml` file but the command line example below will override them. (not recommended for production)
 
 ### Cross-sectional (GLM)
 For single time-point phenotypes:
@@ -156,6 +203,75 @@ The Docker image includes large reference files (~900 MB) required for the pipel
 - Ancestry reference panel (1000 Genomes)
 
 These files are automatically mounted from the container at runtime.
+
+### Caching and Resume Behavior
+
+The pipeline uses **two complementary caching strategies**:
+
+#### 1. Nextflow `-resume` (Task-level caching)
+Nextflow automatically caches completed tasks in the `work/` directory. Use `-resume` to skip successfully completed steps after a failure:
+
+```bash
+nextflow run main.nf -profile standard -params-file params.yml -resume
+```
+
+**How it works:**
+- Only **failed or incomplete** tasks are re-run
+- **Successful parallel tasks are skipped** (e.g., if chr17 and chr18 succeeded but chr19 failed, only chr19 re-runs)
+- Cache is stored in `work/` directory and persists until manually deleted
+- **Limitation:** Cache is invalidated if you change input files, parameters, or delete `work/`
+
+#### 2. Persistent Cache (`p1_run_cache/`)
+The pipeline stores processed genetic QC outputs in `${LONG_GWAS_DIR}/${PROJECT_NAME}/cache/p1_run_cache/` for **cross-session reuse**.
+
+**Current behavior (cumulative mode):**
+```bash
+# First run: Process chr1-3
+export PROJECT_NAME="genome_wide_study"
+input: "genotype/chr{1,2,3}.vcf"
+# → Outputs saved to $LONG_GWAS_DIR/genome_wide_study/cache/p1_run_cache/
+# → Final analysis includes: chr1, chr2, chr3
+
+# Second run: Process chr17-19 (same PROJECT_NAME)
+input: "genotype/chr{17,18,19}.vcf"
+# → chr1-3 automatically loaded from cache
+# → chr17-19 newly processed
+# → Final analysis includes: chr1, chr2, chr3, chr17, chr18, chr19 (all 6)
+```
+
+**Why this happens:**
+The pipeline concatenates ALL cached files with newly processed files (see `main.nf` line ~168: `.concat(cache)`). This enables **incremental genome-wide analysis** where each run builds on previous chromosomes.
+
+**Important considerations:**
+- ✅ **Use cumulative mode** if you're building a complete genome-wide dataset over multiple runs
+- ⚠️ **Beware** if you want to analyze only specific chromosomes in isolation:
+  - Cached chromosomes from previous runs will be included in downstream analyses (PCA, GWAS, results)
+  - To analyze chr17-19 only, use a different `PROJECT_NAME` or manually remove chr1-3 cache files
+- 💡 **Tip:** Use different `PROJECT_NAME` values for different chromosome sets to maintain separate caches
+
+**Example workflows:**
+
+*Incremental genome-wide analysis:*
+```bash
+# Week 1: Process chr1-10
+export PROJECT_NAME="genome_wide"
+nextflow run main.nf --input "chr{1..10}.vcf" -resume
+
+# Week 2: Add chr11-22 (final result has all 22 chromosomes)
+nextflow run main.nf --input "chr{11..22}.vcf" -resume
+```
+
+*Isolated chromosome analysis:*
+```bash
+# Analyze chr17-19 only (use unique PROJECT_NAME)
+export PROJECT_NAME="chr17_19_analysis"
+nextflow run main.nf --input "chr{17,18,19}.vcf" -resume
+```
+
+**Best practices:**
+- Always use `-resume` for failure recovery
+- Use unique `PROJECT_NAME` values for different analyses to avoid cache conflicts
+- Clear cache if you want a fresh start: `rm -rf ${LONG_GWAS_DIR}/${PROJECT_NAME}/cache/p1_run_cache/`
 
 ## Troubleshooting
 

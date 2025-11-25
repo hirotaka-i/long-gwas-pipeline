@@ -372,13 +372,6 @@ nextflow run main.nf -profile adwb -params-file params.yml
 **Best for:** NIH Biowulf HPC cluster - submitting SLURM jobs from login node
 
 **Preparation:**
-We need to use Singularity instead of Docker on Biowulf. First, convert the Docker image to Singularity:
-
-```bash
-mkdir -p $LONG_GWAS_DIR/Docker
-cd $LONG_GWAS_DIR/Docker
-singularity build gwas-pipeline_survival.sif docker://hirotakai/longgwas:v2.0.1
-```
 
 **Configuration:**
 ```groovy
@@ -433,6 +426,15 @@ export LONG_GWAS_DIR=/data/username/gwas
 export PROJECT_NAME=my_study
 module load nextflow singularity
 ```
+
+We need to use Singularity instead of Docker on Biowulf. First, convert the Docker image to Singularity:
+
+```bash
+mkdir -p $LONG_GWAS_DIR/Docker
+cd $LONG_GWAS_DIR/Docker
+singularity build gwas-pipeline_survival.sif docker://hirotakai/longgwas:v2.0.1
+```
+
 
 **Usage:**
 ```bash

@@ -430,7 +430,7 @@ The pipeline validates parameters before execution:
 
 - **[Examples](examples.md)**: Practical usage examples
 - **[File Formats](file_formats.md)**: Input file specifications
-- **[Quick Reference](QUICK_REFERENCE.md)**: Fast parameter lookup
+- **[Repository Guide](REPOSITORY_GUIDE.md)**: Quick reference and architecture
 - **[Profiles](PROFILES_EXPLAINED.md)**: Execution environment configurations
 
 

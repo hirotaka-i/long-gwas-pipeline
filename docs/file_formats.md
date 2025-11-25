@@ -449,5 +449,5 @@ sample3	0	2190
 
 - **[Parameters](parameters.md)**: Column name specifications via parameters
 - **[Examples](examples.md)**: Complete workflow examples
-- **[Quick Reference](QUICK_REFERENCE.md)**: Troubleshooting file format issues
+- **[Repository Guide](REPOSITORY_GUIDE.md)**: Quick reference and troubleshooting
 

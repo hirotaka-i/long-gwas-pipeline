@@ -730,5 +730,5 @@ nextflow config -profile biowulf -show-profiles
 
 - **[Parameters](parameters.md)**: Complete parameter reference
 - **[Examples](examples.md)**: Usage examples with different profiles
-- **[Quick Reference](QUICK_REFERENCE.md)**: Fast troubleshooting
+- **[Repository Guide](REPOSITORY_GUIDE.md)**: Quick reference and troubleshooting
 - **[Docker Improvements](DOCKER_IMPROVEMENTS.md)**: Container details

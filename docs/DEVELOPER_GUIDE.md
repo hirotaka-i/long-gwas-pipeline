@@ -964,8 +964,7 @@ docker rmi longgwas-local-test
 
 - **[Configuration Guide](config.md)**: Detailed Nextflow configuration
 - **[Docker Improvements](DOCKER_IMPROVEMENTS.md)**: Complete Dockerfile.ubuntu22 guide
-- **[Repository Guide](REPOSITORY_GUIDE.md)**: Architecture and code organization
-- **[Quick Reference](QUICK_REFERENCE.md)**: Fast lookup for common tasks
+- **[Repository Guide](REPOSITORY_GUIDE.md)**: Architecture, code organization, and quick reference
 - **[Examples](examples.md)**: Example workflows and use cases
 - **[File Formats](file_formats.md)**: Input/output specifications
 

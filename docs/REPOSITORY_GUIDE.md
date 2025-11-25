@@ -1,21 +1,92 @@
-# Long-GWAS Pipeline - Complete Repository Guide
+# Long-GWAS Pipeline - Repository Guide & Quick Reference
 
-**Last Updated:** November 23, 2025  
-**Version:** main branch  
-**Purpose:** Comprehensive guide to understanding the longitudinal GWAS pipeline architecture
+**Last Updated:** November 25, 2025  
+**Version:** v2flat branch (Flattened Structure)  
+**Purpose:** Complete guide to understanding the pipeline architecture, code organization, and quick troubleshooting
 
 ---
 
 ## Table of Contents
-1. [Overview](#overview)
-2. [Architecture](#architecture)
-3. [Pipeline Flow](#pipeline-flow)
-4. [Directory Structure](#directory-structure)
-5. [Key Components](#key-components)
-6. [Data Flow Diagram](#data-flow-diagram)
+1. [Quick Reference](#quick-reference)
+2. [Overview](#overview)
+3. [Architecture](#architecture)
+4. [Pipeline Flow](#pipeline-flow)
+5. [Directory Structure](#directory-structure)
+6. [Key Components](#key-components)
 7. [Module Details](#module-details)
 8. [Configuration](#configuration)
 9. [Understanding the Code](#understanding-the-code)
+
+---
+
+## Quick Reference
+
+### Common Tasks
+
+**Run the pipeline:**
+```bash
+nextflow run main.nf -profile standard -params-file params.yml
+```
+
+**Debug a specific process:**
+```bash
+# Check process work directory
+cd work/<hash>
+cat .command.sh  # See exact command run
+cat .command.log # See stdout/stderr
+```
+
+**Resume after failure:**
+```bash
+nextflow run main.nf -profile standard -params-file params.yml -resume
+```
+
+**Clear cache and restart:**
+```bash
+rm -rf work/
+nextflow run main.nf -profile standard -params-file params.yml
+```
+
+### File Locations
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Main entry point | `main.nf` | Pipeline orchestration |
+| Process definitions | `modules/*.nf` | QC, data prep, GWAS, results |
+| Helper scripts | `bin/` | Python/R/Shell scripts |
+| Configuration | `nextflow.config` | Profiles and resources |
+| Parameters | `params.yml` | Input files and settings |
+| Reference files | Container: `/srv/GWAS-Pipeline/References` | Genome references |
+| Results | `files/longGWAS_pipeline/results/` | Output directory |
+| Work directory | `work/` | Process execution cache |
+
+### Troubleshooting
+
+**"No such file or directory" errors:**
+- Check file paths are absolute or use `${projectDir}`
+- Verify files exist: `ls -la example/genotype/`
+
+**"Permission denied" on scripts:**
+```bash
+chmod +x bin/*.py bin/*.R bin/*.sh
+```
+
+**Docker pull issues:**
+```bash
+docker pull amcalejandro/longgwas:v2
+```
+
+**Profile not found:**
+```bash
+nextflow config -show-profiles  # List available profiles
+```
+
+**Process fails with exit code 1:**
+```bash
+# Find the work directory from error message
+cd work/<hash>
+cat .command.err  # See error details
+```
 
 ---
 
@@ -34,6 +105,7 @@ This is a **Nextflow-based bioinformatics pipeline** for performing **Genome-Wid
 - Containerized for reproducibility
 - Caching for resume capability
 - Supports multiple genome assemblies (hg18, hg19, hg38)
+- **Simplified flattened structure** (v2flat): 5 module files instead of 17
 
 ### Target Users
 - Genetic epidemiologists
@@ -44,54 +116,89 @@ This is a **Nextflow-based bioinformatics pipeline** for performing **Genome-Wid
 
 ## Architecture
 
-### High-Level Design Pattern
+### High-Level Design Pattern (v2flat - Flattened Structure)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                      main.nf                            │
-│              (Entry point & orchestration)              │
+│         (Entry point & workflow orchestration)          │
+│                                                         │
+│  Pipeline Phases:                                       │
+│  1. Quality Control (QC)                                │
+│  2. Data Preparation                                    │
+│  3. GWAS Analysis                                       │
+│  4. Results Management                                  │
 └──────────────────────┬──────────────────────────────────┘
                        │
                        ▼
 ┌─────────────────────────────────────────────────────────┐
-│                  workflows/gwas.nf                      │
-│              (Main workflow coordinator)                │
+│              modules/ (4 consolidated files)            │
 │                                                         │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │   DOQC      │→ │ GWASDATA_PREP│→ │  GWAS_RUN    │→ │
-│  └─────────────┘  └──────────────┘  └──────────────┘  │
-│         ↓                 ↓                  ↓          │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │ qc.nf (4 processes)                               │ │
+│  │  - GENETICQC      : Variant filtering & QC       │ │
+│  │  - MERGER_SPLITS  : Merge chromosome chunks      │ │
+│  │  - MERGER_CHRS    : Merge all chromosomes        │ │
+│  │  - GWASQC         : Sample QC (ancestry/kinship) │ │
+│  └───────────────────────────────────────────────────┘ │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │ dataprep.nf (7 processes)                         │ │
+│  │  - GETPHENOS      : Extract cohorts               │ │
+│  │  - REMOVEOUTLIERS : Filter samples                │ │
+│  │  - COMPUTE_PCA    : Principal components          │ │
+│  │  - MERGE_PCA      : Merge PCA with data           │ │
+│  │  - GALLOPCOX_INPUT: Prepare longitudinal/survival │ │
+│  │  - RAWFILE_EXPORT : Export for GALLOP/CPH         │ │
+│  │  - EXPORT_PLINK   : Export for GLM                │ │
+│  └───────────────────────────────────────────────────┘ │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │ gwas.nf (3 processes)                             │ │
+│  │  - GWASGLM        : Cross-sectional GWAS          │ │
+│  │  - GWASGALLOP     : Longitudinal GWAS             │ │
+│  │  - GWASCPH        : Survival GWAS                 │ │
+│  └───────────────────────────────────────────────────┘ │
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐ │
+│  │ results.nf (2 processes)                          │ │
+│  │  - SAVEGWAS       : Collect & merge results       │ │
+│  │  - MANHATTAN      : Generate plots                │ │
+│  └───────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────┘
-         │                 │                  │
-         ▼                 ▼                  ▼
-┌─────────────────────────────────────────────────────────┐
-│              subworkflows/ (4 files)                    │
-│  - fullqc.nf       : Genetic QC workflow                │
-│  - gwasinputs.nf   : Data preparation workflow          │
-│  - rungwas.nf      : GWAS execution workflow            │
-│  - saveresults.nf  : Results export workflow            │
-└─────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────┐
-│              modules/ (Individual processes)            │
-│  - geneticqc/   : QC & merge genetic data               │
-│  - gwasprep/    : Prepare inputs for GWAS               │
-│  - gwasrun/     : Run GWAS (GLM/GALLOP/CPH)             │
-│  - gwasqc/      : Additional QC steps                   │
-│  - resultsout/  : Export results & plots                │
-└─────────────────────────────────────────────────────────┘
-         │
-         ▼
+                       │
+                       ▼
 ┌─────────────────────────────────────────────────────────┐
 │                 bin/ (Helper scripts)                   │
-│  - process1.sh        : Genetic preprocessing           │
-│  - qc.py              : Quality control                 │
-│  - glm_phenocovar.py  : GLM analysis helper             │
-│  - survival.R         : Survival analysis               │
-│  - addi_qc_pipeline.py: Additional QC                   │
+│  - get_phenos.py      : Extract cohorts from covariates │
+│  - remove_outliers.py : Outlier & kinship filtering     │
+│  - addi_qc_pipeline.py: Ancestry & kinship QC           │
+│  - glm_phenocovar.py  : GLM phenotype preparation       │
+│  - gallop.py          : GALLOP wrapper                  │
+│  - survival.R         : Cox proportional hazards        │
+│  - manhattan.py       : Manhattan plot generation       │
+│  - qc.py              : Quality control utilities       │
+│  - process1.sh        : Genetic preprocessing pipeline  │
 └─────────────────────────────────────────────────────────┘
 ```
+
+### Why the Flattened Structure?
+
+**Before (v2):** 17 .nf files across main.nf, workflows/, subworkflows/, and modules/
+**After (v2flat):** 5 .nf files - main.nf + 4 consolidated modules
+
+**Benefits:**
+- ✅ **Simpler navigation:** Related processes grouped together
+- ✅ **Easier maintenance:** One file per functional area
+- ✅ **Full debugging preserved:** Process-level granularity maintained
+- ✅ **Better organization:** Clear separation of pipeline phases
+- ✅ **No functionality loss:** Identical behavior to v2
+
+**Key Insight:** Nextflow debugging depends on process count, not file count. Each process still gets:
+- Separate work directory with unique hash
+- Independent caching for `-resume`
+- Individual logs and error messages
+- Process-specific resource allocation
 
 ---
 

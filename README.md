@@ -59,6 +59,14 @@ Output: Association statistics + Manhattan plots
    - `-profile`: Environment configuration (see Profiles below)
    - `params.yml`: Parameter settings file
 
+    **TIPS**: the following option will also creates some reports
+    ```
+    nextflow run main.nf -profile standard -params-file params.yml \
+    --report report.html\
+    --timeline timeline.html\
+    --trace trace.txt\
+    --dag flowchart.png
+    ```
 ## Profiles
 
 The pipeline supports multiple execution profiles for different environments, such as local, HPC, and cloud setups. Profiles define resource allocation, containerization, and execution settings.
@@ -130,13 +138,11 @@ For package installations or Docker modifications, see the [Developer's Guide](d
 - 📊 **[File Formats](docs/file_formats.md)**: Input/output file specifications
 - 📝 **[Examples](docs/examples.md)**: Example workflows and use cases
 - 🔧 **[Configuration](docs/config.md)**: Profile and resource configuration
-- ⚡ **[Quick Reference](docs/QUICK_REFERENCE.md)**: Fast lookup for common tasks
 
 ### For Developers
 - 🚀 **[Developer's Guide](docs/DEVELOPER_GUIDE.md)**: Complete development workflow, Docker builds, testing, and deployment
 - 🐳 **[Docker Improvements](docs/DOCKER_IMPROVEMENTS.md)**: Dockerfile.ubuntu22 architecture and optimizations
-- 🏗️ **[Repository Guide](docs/REPOSITORY_GUIDE.md)**: Code organization and architecture
-- 📖 **[Reference Files Setup](docs/REFERENCE_FILES_SETUP.md)**: Managing genome references and resources
+- 🏗️ **[Repository Guide](docs/REPOSITORY_GUIDE.md)**: Code organization, architecture, and quick reference
 
 ## Architecture Notes
 
@@ -149,7 +155,7 @@ The Docker image includes large reference files (~900 MB) required for the pipel
 - `hg19ToHg38.over.chain.gz` / `hg18ToHg38.over.chain.gz`: Liftover chain files
 - Ancestry reference panel (1000 Genomes)
 
-See [Reference Files Setup](docs/REFERENCE_FILES_SETUP.md) for details.
+These files are automatically mounted from the container at runtime.
 
 ## Troubleshooting
 

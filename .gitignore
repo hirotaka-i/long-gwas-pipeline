@@ -148,3 +148,5 @@ files/
 example/genotype/example.vcf/
 .nextflow/
 work/
+Docker
+example/

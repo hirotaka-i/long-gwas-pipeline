@@ -45,8 +45,12 @@ Output: Association statistics + Manhattan plots
    git clone -b v2 https://github.com/hirotaka-i/long-gwas-pipeline.git
    cd long-gwas-pipeline
    ```
-
-2. **Run the pipeline:**
+2. **Extract example:**
+   ```bash
+   tar -xzf example/genotype/example_data.tar.gz -C example/genotype/
+   ```
+3. **Run the pipeline:**   
+   If docker is available, run:
    ```bash
    nextflow run main.nf -profile standard -params-file params.yml
    ```
@@ -57,47 +61,21 @@ Output: Association statistics + Manhattan plots
 
 ## Profiles
 
-The pipeline supports multiple execution profiles defined in `nextflow.config`:
+The pipeline supports multiple execution profiles for different environments, such as local, HPC, and cloud setups. Profiles define resource allocation, containerization, and execution settings.
 
-### 1. `standard` (Recommended for most users)
-Uses the official Docker image from DockerHub:
-```bash
-nextflow run main.nf -profile standard -params-file params.yml
-```
-- **Docker image**: `amcalejandro/longgwas:v2` (stable, production-ready)
-- **Scripts**: Uses your local `bin/` directory (auto-mounted by Nextflow)
-- **No build required**: Just pull and run
+For detailed information on available profiles and their configurations, see the [Configuration Guide](docs/config.md).
 
-*TIPS*: When first attempt failed, you can resume where it failed with
-```
-nextflow run main.nf -profile standard -params-file params.yml -resume
-```
-Also, you can display the flowchart. 
-```
-nextflow run main.nf -profile standard -params-file params.yml -with-dag flowchart.html
-```
+### Example Usage
 
-### 2. `localtest` (For developers)
-Uses a locally built Docker image for testing modifications:
-```bash
-# First, build the Docker image (Apple Silicon requires --platform flag)
-docker build --platform linux/amd64 -f Dockerfile.ubuntu22 -t longgwas-local-test .
+- **Standard Profile** (local execution with Docker):
+  ```bash
+  nextflow run main.nf -profile standard -params-file params.yml
+  ```
 
-# Then run the pipeline
-nextflow run main.nf -profile localtest -params-file params.yml
-```
-- **Docker image**: `longgwas-local-test` (built locally)
-- **Scripts**: Uses your local `bin/` directory (auto-mounted by Nextflow)
-- **Purpose**: Test Docker image changes before pushing to DockerHub
-
-### 3. Other profiles
-- `adwb`: All-of-Us Data Workbench environment
-- `biowulf`: NIH Biowulf HPC with Singularity
-- `gls`: Google Life Sciences
-- `gcb`: Google Cloud Batch
-- `gs-data`: Google Cloud Storage with local executor
-
-See [Configuration Guide](docs/config.md) for details on each profile.
+- **Biowulf Profile** (HPC execution with Singularity):
+  ```bash
+  nextflow run main.nf -profile biowulf -params-file params.yml
+  ```
 
 ## Analysis Types
 

@@ -1,6 +1,6 @@
 ---
 # Input files (using Nextflow ${projectDir} variable)
-input: "${projectDir}/example/genotype/example.vcf/chr[20-22].vcf"
+input: "${projectDir}/example/genotype/chr[20-22].vcf"
 covarfile: "${projectDir}/example/covariates.tsv"
 phenofile: "${projectDir}/example/phenotype.surv.tsv"
 

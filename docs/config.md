@@ -481,14 +481,8 @@ biowulflocal {
 - Suitable for interactive testing
 
 **Setup:**
-```bash
-# The same setup as biowulf profile
 
-# Then run pipeline
-module load nextflow singularity
-export LONG_GWAS_DIR=$PWD # or /path/to/working/directory
-export PROJECT_NAME=my_study
-```
+The same setup as biowulf profile
 
 **Usage:**
 ```bash

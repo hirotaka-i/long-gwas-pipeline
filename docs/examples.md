@@ -284,5 +284,5 @@ nextflow run main.nf -profile standard -params-file params.yml
 - **[Parameters Reference](parameters.md)**: Complete list of all parameters
 - **[File Formats](file_formats.md)**: Input file specifications
 - **[Profiles Explained](PROFILES_EXPLAINED.md)**: Detailed profile configurations
-- **[Quick Reference](QUICK_REFERENCE.md)**: Fast troubleshooting guide
+- **[Repository Guide](REPOSITORY_GUIDE.md)**: Quick reference and troubleshooting
 

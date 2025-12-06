@@ -21,7 +21,24 @@ process GETPHENOS {
   
   script:
     """
+    echo "=== GETPHENOS Debug Info ===" >&2
+    echo "PWD: \$PWD" >&2
+    echo "Files in current directory:" >&2
+    ls -lah >&2
+    echo "Covariate file exists: \$(test -f covariates.tsv && echo 'YES' || echo 'NO')" >&2
+    echo "Covariate file size: \$(wc -l covariates.tsv 2>&1)" >&2
+    echo "Python version: \$(python --version 2>&1)" >&2
+    echo "get_phenos.py location: \$(which get_phenos.py 2>&1)" >&2
+    echo "Running: get_phenos.py covariates.tsv ${params.study_col}" >&2
+    echo "===========================" >&2
+    
+    set -x
     get_phenos.py covariates.tsv "${params.study_col}"
+    set +x
+    
+    echo "=== GETPHENOS Completed ===" >&2
+    echo "Output file created: \$(test -f phenos_list.txt && echo 'YES' || echo 'NO')" >&2
+    test -f phenos_list.txt && echo "Output contents:" >&2 && cat phenos_list.txt >&2
     """
 }
 

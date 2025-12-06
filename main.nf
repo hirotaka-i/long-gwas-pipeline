@@ -30,7 +30,8 @@ log.info """\
  phenotype name                           : ${params.pheno_name}
  covariates                               : ${params.covariates}
  analysis                                 : ${MODEL}
- outdir                                   : ${PWD}/files/longGWAS_pipeline/results/cache/${params.dataset}
+ project directory                        : ${params.project_dir}
+ dataset                                  : ${params.dataset}
  """
 
 /*
@@ -51,7 +52,7 @@ include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
  * Get the cache and the input check channels
  */
 Channel
-  .fromPath("${params.store_dir}/${params.dataset}/p1_run_cache/*", checkIfExists: false)
+  .fromPath("${params.project_dir}/${params.dataset}/p1_run_cache/*", checkIfExists: false)
   .map{ f -> tuple(f.getSimpleName(), f) }
   .set{ cache }
 

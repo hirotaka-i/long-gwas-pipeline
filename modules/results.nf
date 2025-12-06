@@ -44,7 +44,7 @@ process MANHATTAN {
   publishDir "${OUTPUT_DIR}/${params.dataset}/RESULTS/${model}_MANHATTAN_${params.datetime}", mode: 'copy', overwrite: true
 
   input:
-    each x
+    each path(input_file)
     val(model)
 
   output:
@@ -52,6 +52,6 @@ process MANHATTAN {
 
   script:
     """
-    manhattan.py --input ${x} --model ${model} --suffix ${params.out}
+    manhattan.py --input ${input_file} --model ${model} --suffix ${params.out}
     """
 }

@@ -131,6 +131,15 @@ For detailed information on available profiles and their configurations, see the
   nextflow run main.nf -profile biowulf -params-file params.yml
   ```
 
+- **Google Cloud Batch Profile** (cloud execution via Verily Workbench):
+  ```bash
+  # From within Verily Workbench VM
+  export STORE_ROOT='gs://your-bucket-name'
+  export PROJECT_NAME='your-project'
+  wb nextflow run main.nf -profile gcb -params-file params.yml -with-tower
+  ```
+  See the [Verily Workbench Setup Guide](docs/vwb_setup.md) for complete instructions.
+
 ## Analysis Types
 NOTE: Options are set in the `params.yml` file but the command line example below will override them. (not recommended for production)
 
@@ -185,6 +194,7 @@ For package installations or Docker modifications, see the [Developer's Guide](d
 - 📊 **[File Formats](docs/file_formats.md)**: Input/output file specifications
 - 📝 **[Examples](docs/examples.md)**: Example workflows and use cases
 - 🔧 **[Configuration](docs/config.md)**: Profile and resource configuration
+- ☁️ **[Verily Workbench Setup](docs/vwb_setup.md)**: Running on Verily Workbench with Google Cloud Batch
 
 ### For Developers
 - 🚀 **[Developer's Guide](docs/DEVELOPER_GUIDE.md)**: Complete development workflow, Docker builds, testing, and deployment

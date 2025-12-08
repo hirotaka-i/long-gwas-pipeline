@@ -150,4 +150,5 @@ example/genotype/example.vcf/
 work/
 Docker
 example/
-.vwb.env
+*.env
+params_*.yml

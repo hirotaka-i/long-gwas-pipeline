@@ -56,6 +56,7 @@ source ~/.vwb.env
 ```bash
 cd ~/repos/longgwas
 git pull origin main  # Update to latest code
+tar -xzf example/genotype/example.vcf.tar.gz -C example/genotype/ # Extract example VCF
 
 wb nextflow -log z_$(date +%Y%m%d_%H%M%S).log run main.nf \
   -profile gcb \

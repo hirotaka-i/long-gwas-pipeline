@@ -1,22 +1,62 @@
 #!/bin/bash
 # Take the vcf file (genotyped or imputed)
-# Return: pass(&R2)-filtered, lifted to hg38 (if needed), split, left-normalized, autosomal-par, hg38-ref-alt-aligned SNPs with mac >=2. geno < 0.05
+# Resource folder needed and files will be downloaded on-demand if not present
+# Process:
+# 1. Filter PASS (& R2)
+# 2. Liftover to hg38 (if needed)
+# 3. Split multiallelics
+# 4. Left-normalize on hg38
+# 5. Keep only well-behaved SNPs (MAC≥2, ref-aligned, no provisional, no dups, geno<0.1)
+# 6. Standard naming chr:pos:ref:alt
+
+## e.g. process1.sh 2 '/data/CARD/PD/imputed_data/CORIELL/chr21.dose.vcf.gz' 0.3 hg19 chr21_cor
+## e.g. using docker:
+# rm -rf test_output && mkdir -p References test_output && docker run --rm \
+#   -v "$PWD:/workspace" \
+#   -v "$PWD/References:/workspace/References" \
+#   -e RESOURCE_DIR=/workspace/References \
+#   -w /workspace \
+#   longgwas:slim bash -c "cd test_output && bash ../bin/process1.sh 2 ../example/genotype/chr21.vcf -9 hg19 chr21_test 2>&1 | tee process1.log"
+
 
 # Parameters
 N=$1 # Threads to use
 VFILE=$2
 R2THRES=$3 # If imputed, give a number for R2 threshold (usually 0.3 - 0.8) -9 otherwise
 ASSEMBLY=$4 # [hg18, hg19, hg38]. Define if the liftover is required or not
-CHRNUM=$5 # [1..22] Needed for lift over. 
-FILE=$6 # Base file name. can be anything as long as unique
-## e.g. process1.sh 2 '/data/CARD/PD/imputed_data/CORIELL/chr21.dose.vcf.gz' 0.3 hg19 21 chr21_cor
+FILE=$5 # Base file name. can be anything as long as unique
 
-# Resources (Uses RESOURCE_DIR environment variable from nextflow.config profiles)
-# Default to Docker paths if RESOURCE_DIR not set (for backward compatibility)
-RESOURCE_DIR=${RESOURCE_DIR:-/srv/GWAS-Pipeline/References}
+# Resources (References always mounted from host)
+RESOURCE_DIR=${RESOURCE_DIR:-./References}
 FA=${RESOURCE_DIR}/Genome/hg38.fa.gz
 LIFTOVERCHAIN=${RESOURCE_DIR}/liftOver/${ASSEMBLY}ToHg38.over.chain.gz
 
+# Ensure reference genomes are available
+# This downloads references on-demand if they don't exist
+if [ ! -f "$FA" ] || [ ! -f "${FA}.fai" ]; then
+    echo "Reference genome hg38 not found. Downloading..."
+    if command -v bash &> /dev/null && [ -f "$(dirname "$0")/download_references.sh" ]; then
+        bash "$(dirname "$0")/download_references.sh" "$ASSEMBLY" "$RESOURCE_DIR"
+    else
+        echo "ERROR: Reference genomes not available and cannot auto-download."
+        echo "Please run: bin/download_references.sh $ASSEMBLY"
+        exit 1
+    fi
+fi
+
+if [ "$ASSEMBLY" != "hg38" ]; then
+    ASSEMBLY_FA=${RESOURCE_DIR}/Genome/${ASSEMBLY}.fa.gz
+    if [ ! -f "$ASSEMBLY_FA" ] || [ ! -f "${ASSEMBLY_FA}.fai" ] || [ ! -f "$LIFTOVERCHAIN" ]; then
+        echo "Source assembly ${ASSEMBLY} references not found. Downloading..."
+        if command -v bash &> /dev/null && [ -f "$(dirname "$0")/download_references.sh" ]; then
+            bash "$(dirname "$0")/download_references.sh" "$ASSEMBLY" "$RESOURCE_DIR"
+        else
+            echo "ERROR: Reference genomes not available and cannot auto-download."
+            echo "Please run: bin/download_references.sh $ASSEMBLY"
+            exit 1
+        fi
+    fi
+fi
 
 ######## start processing ###############################
 # Step 1: Filter PASS (&R2 if imputed) and add "chr" prefix if missing
@@ -96,5 +136,7 @@ plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps --make-pgen --r
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned --make-pgen --set-all-var-ids 'chr@:#:$r:$a' --out ${FILE}_split_hg38_normalized_snps_aligned_renamed
 # remove dup
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed --make-pgen --rm-dup exclude-all --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq
-# geno 0.05
-plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq --make-pgen --geno 0.05 dosage --out ${FILE}_p1out
+# geno 0.1 filter (lenient because potentially mixed ancestry samples)
+plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq --make-pgen --geno 0.1 dosage --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01
+# convert to plink bed format with keep-allele-order for merging later
+plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01 --keep-allele-order --make-bed --out ${FILE}_p1out

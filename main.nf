@@ -43,7 +43,7 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
 /* 
  * Import consolidated modules
  */
-include { GENETICQC; MERGER_SPLITS; MERGER_CHRS; GWASQC } from './modules/qc.nf'
+include { GENETICQC; MERGER_CHUNKS; MERGER_CHRS; GWASQC } from './modules/qc.nf'
 include { GETPHENOS; REMOVEOUTLIERS; COMPUTE_PCA; MERGE_PCA; GALLOPCOX_INPUT; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
@@ -94,60 +94,60 @@ workflow {
     input_idx_list
         .merge(chrvcf)
         .branch {
-            split_tasks_1: it[0] <= 5 
+            chunk_tasks_1: it[0] <= 5 
                             return it
-            split_tasks_2: it[0] < 10 && it[0] > 5 
+            chunk_tasks_2: it[0] < 10 && it[0] > 5 
                             return it
-            split_tasks_3: it[0] < 14 && it[0] >= 10 
+            chunk_tasks_3: it[0] < 14 && it[0] >= 10 
                             return it
-            split_tasks_4: it[0] < 18 && it[0] >= 14 
+            chunk_tasks_4: it[0] < 18 && it[0] >= 14 
                             return it
-            split_tasks_5: true
+            chunk_tasks_5: true
         }.set{ input_p1 }
 
-    input_p1.split_tasks_1
+    input_p1.chunk_tasks_1
         .map{ fIdx, fSimple, fOrig -> fOrig }
         .splitText(by: params.chunk_size, file: true, compress: true)
         .map{ fn -> tuple(fn.getSimpleName(), fn) }
-        .set{ input_split_ch_1 }
+        .set{ input_chunk_ch_1 }
 
-    input_p1.split_tasks_2
+    input_p1.chunk_tasks_2
           .map{ fIdx, fSimple, fOrig -> fOrig }
           .splitText(by: params.chunk_size, file: true, compress: true)
           .map{ fn -> tuple(fn.getSimpleName(), fn) }
-          .set{ input_split_ch_2 }
+          .set{ input_chunk_ch_2 }
 
-    input_p1.split_tasks_3
+    input_p1.chunk_tasks_3
           .map{ fIdx, fSimple, fOrig -> fOrig }
           .splitText(by: params.chunk_size, file: true, compress: true)
           .map{ fn -> tuple(fn.getSimpleName(), fn) }
-          .set{ input_split_ch_3 }
+          .set{ input_chunk_ch_3 }
 
-    input_p1.split_tasks_4
+    input_p1.chunk_tasks_4
           .map{ fIdx, fSimple, fOrig -> fOrig }
           .splitText(by: params.chunk_size, file: true, compress: true)
           .map{ fn -> tuple(fn.getSimpleName(), fn) }
-          .set{ input_split_ch_4 }
+          .set{ input_chunk_ch_4 }
 
-    input_p1.split_tasks_5
+    input_p1.chunk_tasks_5
           .map{ fIdx, fSimple, fOrig -> fOrig }
           .splitText(by: params.chunk_size, file: true, compress: true)
           .map{ fn -> tuple(fn.getSimpleName(), fn) }
-          .set{ input_split_ch_5 }
+          .set{ input_chunk_ch_5 }
 
-    input_split_ch_1
-        .mix(input_split_ch_2, 
-             input_split_ch_3,
-             input_split_ch_4,
-             input_split_ch_5)
+    input_chunk_ch_1
+        .mix(input_chunk_ch_2, 
+             input_chunk_ch_3,
+             input_chunk_ch_4,
+             input_chunk_ch_5)
         .set{ input_chunks_ch }
     
     chrvcf
         .cross(input_chunks_ch)
         .flatten()
         .collate(4, false)
-        .map{ fSimple1, fOrig, fSimple2, fSplit -> 
-            tuple(fSimple1, file(fOrig), fSplit) }
+        .map{ fSimple1, fOrig, fSimple2, fChunk -> 
+            tuple(fSimple1, file(fOrig), fChunk) }
         .set{ input_p1_run_ch }
 
     // Run genetic QC
@@ -158,10 +158,10 @@ workflow {
                         { vSimple, prefix -> ["${vSimple}.mergelist.txt", prefix] }
         .set{ chunknames }
 
-    // Merge splits
-    MERGER_SPLITS(chunknames, GENETICQC.out.snpchunks_merge.collect())
+    // Merge chunks
+    MERGER_CHUNKS(chunknames, GENETICQC.out.snpchunks_merge.collect())
     
-    MERGER_SPLITS.out
+    MERGER_CHUNKS.out
         .collect()
         .flatten()
         .map{ fn -> tuple(fn.getSimpleName(), fn) }

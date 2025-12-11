@@ -2,60 +2,46 @@
  * Consolidated QC Module
  * Contains all quality control processes:
  * - GENETICQC: Genotype preprocessing and filtering
- * - MERGER_SPLITS: Merge chromosome chunks
+ * - MERGER_CHUNKS: Merge chromosome chunks
  * - MERGER_CHRS: Merge all chromosomes
  * - GWASQC: GWAS-level QC (ancestry, kinship, outliers)
  */
 
-/* Process 1 Run - Definition
- * -------------
- * Genotype preprocessing
- * returns the SNPs after applying
- *  - pass (&R2) filter
- *  - split
- *  - left-normalize
- *  - autosmal-par
- *  - hg38 alignment (liftOver)
- *  - mac >= 2
- *  - geno < 0.05
- */
+/* Process 1 Run - Variant Standardization */
 process GENETICQC {
   scratch true
   label 'medium'
 
   input:
-    tuple val(vSimple), path(fOrig), path(fSplit)
+    tuple val(vSimple), path(fOrig), path(fChunk)
   output:
     tuple file("${output}.bed"), file("${output}.bim"), file("${output}.fam"), emit: snpchunks_merge
     tuple val(vSimple), val("${output}"), emit: snpchunks_names
 
   script:
-  def chrnum = ""
   def vPart = ""
   def prefix = ""
 
-  def mChrom = vSimple =~ /(?i)(chr)([0-9]+)/
-  chrnum = mChrom[0][2]
-  vPart = fSplit.getBaseName()
+  vPart = fChunk.getBaseName()
 
   def mPart = vPart =~ /(.*)\.([0-9]+)\.(.*)$/
   vPart = mPart[0][2]
 
   prefix = "${vSimple}.${vPart}"
   output = "${prefix}_p1out"
-  ext = fSplit.getExtension()
+  ext = fChunk.getExtension()
 
   """
-  echo "Processing - ${fSplit}"
+  echo "Processing - ${fChunk}"
   echo "Assigned cpus: ${task.cpus}"
   echo "Assigned memory: ${task.memory}"
   
   set +x
   if [[ ${vPart} == 1 ]]; then
-    cp $fSplit tmp_input.${ext}
+    cp $fChunk tmp_input.${ext}
   else
     bcftools view -h $fOrig | gzip > tmp_input.${ext}
-    cat $fSplit >> tmp_input.${ext}
+    cat $fChunk >> tmp_input.${ext}
   fi
 
   process1.sh \
@@ -63,19 +49,14 @@ process GENETICQC {
     tmp_input.${ext} \
     ${params.r2thres} \
     ${params.assembly} \
-    ${chrnum} \
     ${prefix}
-  
-  plink2 --pfile ${output} \
-        --make-bed \
-        --out ${output}
   """
 }
 
-process MERGER_SPLITS {
+process MERGER_CHUNKS {
   scratch true
   storeDir "${STORE_DIR}/${params.dataset}/p1_run_cache"
-  publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/MERGER_SPLITS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.log"
+  publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/MERGER_CHUNKS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.log"
   label 'small'
 
   input:

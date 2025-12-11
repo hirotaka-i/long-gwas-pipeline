@@ -152,3 +152,4 @@ Docker
 example/
 *.env
 params_*.yml
+References/

@@ -1,35 +1,97 @@
-# Docker Build Artifacts
+# Build Artifacts
 
-This directory contains frozen versions of bioinformatics tools used in the Docker image.
+This directory contains pre-downloaded binary tools and source archives used to build the Docker image. These files are committed to the repository to ensure reproducible, offline builds.
 
-## Why are these stored here?
+## Why Are These Committed to Git?
 
-These binaries are committed to the repository because:
+1. **Reproducibility** - Exact versions are preserved and guaranteed
+2. **Offline builds** - No internet connection required during Docker builds
+3. **Build speed** - No download time (faster CI/CD)
+4. **Reliability** - Immune to upstream URL changes or deletions
+5. **Transparency** - Clear audit trail of tool versions
 
-1. **Upstream availability is not guaranteed** - URLs frequently break or get reorganized
-2. **Version freezing** - Ensures exact reproducibility of the pipeline
-3. **Build reliability** - Docker builds work offline and don't depend on external servers
+## Binary Tools
 
-## Contents
+### PLINK 2.0
+- **File**: `plink2_linux_x86_64_20251205.zip`
+- **Version**: 2.0.0-a.7LM (December 5, 2025)
+- **Purpose**: Genome-wide association analysis, QC, and data management
+- **Download**: https://www.cog-genomics.org/plink/2.0/
+- **Direct Link**: https://s3.amazonaws.com/plink2-assets/alpha6/plink2_linux_x86_64_20251205.zip
+- **License**: GPLv3
+- **Reference**: Chang CC, et al. (2015) Second-generation PLINK. GigaScience, 4.
 
-- `plink2_linux_x86_64_20210920.zip` (8.7 MB) - PLINK 2.0 (Sep 20, 2021)
-- `plink_linux_x86_64_20210606.zip` (8.5 MB) - PLINK 1.9 (Jun 6, 2021)
-- `gcta_1.93.2beta.zip` (11 MB) - GCTA 1.93.2 beta
-- `liftOver_20250627.zip` (8.8 MB, 24 MB uncompressed) - UCSC Genome Browser liftOver tool (build date: Jun 27, 2025)
+### PLINK 1.9
+- **File**: `plink_linux_x86_64_20210606.zip`
+- **Version**: 1.90b6.21 (June 6, 2021)
+- **Purpose**: Legacy PLINK for compatibility
+- **Download**: https://www.cog-genomics.org/plink/1.9/
+- **Direct Link**: https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20210606.zip
+- **License**: GPLv3
+- **Reference**: Purcell S, et al. (2007) Am J Hum Genet, 81:559-575.
 
-## Original URLs (may be broken)
+### GCTA
+- **File**: `gcta_1.93.2beta.zip`
+- **Version**: 1.93.2beta
+- **Purpose**: Genome-wide Complex Trait Analysis (kinship, REML)
+- **Download**: https://yanglab.westlake.edu.cn/software/gcta/
+- **Direct Link**: https://yanglab.westlake.edu.cn/software/gcta/bin/gcta_1.93.2beta.zip
+- **License**: MIT License
+- **Reference**: Yang J, et al. (2011) Am J Hum Genet, 88:76-82.
 
-- PLINK2: `https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20210920.zip` ❌ 404
-- PLINK1: `https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20210606.zip`
-- GCTA: `https://cnsgenomics.com/software/gcta/bin/gcta_1.93.2beta.zip`
-- liftOver: `http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/liftOver` (Last-Modified: Fri, 27 Jun 2025)
+## Source Code Archives
 
-## Updating versions
+### bcftools
+- **File**: `bcftools-1.20.tar.bz2` (7.5 MB)
+- **Version**: 1.20
+- **Purpose**: VCF/BCF manipulation, variant calling, liftover
+- **Download**: https://github.com/samtools/bcftools/releases/tag/1.20
+- **Direct Link**: https://github.com/samtools/bcftools/releases/download/1.20/bcftools-1.20.tar.bz2
+- **License**: MIT/Expat
+- **Reference**: Danecek P, et al. (2021) GigaScience, 10(2):giab008.
 
-If you need to update to newer versions:
+### HTSlib
+- **File**: `htslib-1.20.tar.bz2` (4.6 MB)
+- **Version**: 1.20
+- **Purpose**: C library for SAM/BAM/CRAM/VCF/BCF formats
+- **Download**: https://github.com/samtools/htslib/releases/tag/1.20
+- **Direct Link**: https://github.com/samtools/htslib/releases/download/1.20/htslib-1.20.tar.bz2
+- **License**: MIT/Expat
+- **Reference**: Bonfield JK, et al. (2021) GigaScience, 10(2):giab007.
 
-1. Download the new binaries
-2. Place them in this directory
-3. Update the COPY commands in `Dockerfile`
-4. Test the Docker build thoroughly
-5. Update this README with new version info
+### SAMtools
+- **File**: `samtools-1.20.tar.bz2` (8.8 MB)
+- **Version**: 1.20
+- **Purpose**: SAM/BAM/CRAM manipulation, faidx indexing
+- **Download**: https://github.com/samtools/samtools/releases/tag/1.20
+- **Direct Link**: https://github.com/samtools/samtools/releases/download/1.20/samtools-1.20.tar.bz2
+- **License**: MIT/Expat
+- **Reference**: Danecek P, et al. (2021) GigaScience, 10(2):giab008.
+
+### METAL
+- **File**: `METAL-2020-05-05.tar.gz` (970 KB)
+- **Version**: 2020-05-05
+- **Purpose**: Meta-analysis of GWAS
+- **Download**: https://github.com/statgen/METAL/releases/tag/2020-05-05
+- **Direct Link**: https://github.com/statgen/METAL/archive/refs/tags/2020-05-05.tar.gz
+- **License**: BSD-3-Clause
+- **Reference**: Willer CJ, et al. (2010) Bioinformatics, 26(17):2190-2191.
+
+### bcftools liftover plugin
+- **File**: `liftover.c` (120 KB)
+- **Version**: Latest from master
+- **Purpose**: Genome coordinate conversion for VCF files
+- **Repository**: https://github.com/freeseek/score
+- **Direct Link**: https://raw.githubusercontent.com/freeseek/score/master/liftover.c
+- **Author**: Giulio Genovese (third-party, not official bcftools)
+- **License**: MIT
+
+
+## License Summary
+
+All tools are open-source:
+- **MIT/Expat**: bcftools, HTSlib, SAMtools, liftover plugin, GCTA
+- **GPLv3**: PLINK 1.9, PLINK 2.0
+- **BSD-3-Clause**: METAL
+
+See individual tool websites for full license terms

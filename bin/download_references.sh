@@ -1,13 +1,20 @@
 #!/bin/bash
 #
-# Download reference files for local execution of long-gwas-pipeline
+# Download and prepare reference genomes for bcftools +liftover
 #
-# This script downloads the necessary reference genome and liftOver chain files
-# required for running the pipeline with the 'standard' profile (local execution).
+# This script downloads reference genomes on-demand based on the source assembly.
+# It automatically handles bgzip compression and fai indexing required by bcftools +liftover.
 #
-# Usage: ./bin/download_references.sh [target_directory]
+# Usage: 
+#   ./bin/download_references.sh <source_assembly> [reference_dir]
 #
-# Default target: ./files (as specified in standard profile)
+# Arguments:
+#   source_assembly: Source genome assembly (hg18, hg19, or hg38)
+#   reference_dir: Reference directory (default: ./References)
+#
+# Examples:
+#   ./bin/download_references.sh hg19
+#   ./bin/download_references.sh hg18 /path/to/references
 #
 
 set -e  # Exit on error
@@ -18,136 +25,139 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Target directory (default: ./files)
-TARGET_DIR="${1:-$PWD/files}"
+# Parse arguments
+SOURCE_ASSEMBLY="${1}"
+REF_DIR="${2:-${RESOURCE_DIR:-./References}}"
+
+# Validate source assembly argument
+if [ -z "$SOURCE_ASSEMBLY" ]; then
+    echo -e "${RED}Error: Source assembly required${NC}"
+    echo "Usage: $0 <hg18|hg19|hg38> [reference_dir]"
+    exit 1
+fi
+
+if [[ ! "$SOURCE_ASSEMBLY" =~ ^(hg18|hg19|hg38)$ ]]; then
+    echo -e "${RED}Error: Invalid assembly '${SOURCE_ASSEMBLY}'${NC}"
+    echo "Valid options: hg18, hg19, hg38"
+    exit 1
+fi
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Reference Files Download Script${NC}"
+echo -e "${GREEN}Reference Genome Setup${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "Target directory: ${TARGET_DIR}"
+echo "Source assembly: ${SOURCE_ASSEMBLY}"
+echo "Reference directory: ${REF_DIR}"
 echo ""
 
 # Create directory structure
-echo -e "${YELLOW}[1/5] Creating directory structure...${NC}"
-mkdir -p "${TARGET_DIR}/Genome"
-mkdir -p "${TARGET_DIR}/liftOver"
-echo -e "${GREEN}✓ Directories created${NC}"
-echo ""
+mkdir -p "${REF_DIR}/Genome"
+mkdir -p "${REF_DIR}/liftOver"
 
-# Download hg38 reference genome
-echo -e "${YELLOW}[2/5] Downloading hg38 reference genome...${NC}"
-echo "Source: UCSC Genome Browser"
-echo "File: hg38.fa.gz (~938 MB)"
-echo ""
-
-if [ -f "${TARGET_DIR}/Genome/hg38.fa.gz" ]; then
-    echo -e "${YELLOW}hg38.fa.gz already exists. Skipping download.${NC}"
-else
-    echo "Downloading hg38.fa.gz..."
-    curl -L -o "${TARGET_DIR}/Genome/hg38.fa.gz" \
-        "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz"
-    echo -e "${GREEN}✓ hg38.fa.gz downloaded${NC}"
-fi
-echo ""
-
-# Download hg38 index (optional but recommended)
-echo -e "${YELLOW}[3/5] Downloading hg38 FASTA index...${NC}"
-if [ -f "${TARGET_DIR}/Genome/hg38.fa.gz.fai" ]; then
-    echo -e "${YELLOW}hg38.fa.gz.fai already exists. Skipping download.${NC}"
-else
-    echo "Downloading hg38.fa.gz.fai..."
-    curl -L -o "${TARGET_DIR}/Genome/hg38.fa.gz.fai" \
-        "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz.fai"
-    echo -e "${GREEN}✓ hg38.fa.gz.fai downloaded${NC}"
-fi
-echo ""
-
-# Download liftOver chain files
-echo -e "${YELLOW}[4/5] Downloading liftOver chain files...${NC}"
-echo "These files convert genome coordinates between assemblies"
-echo ""
-
-# hg18 to hg38
-if [ -f "${TARGET_DIR}/liftOver/hg18ToHg38.over.chain.gz" ]; then
-    echo -e "${YELLOW}hg18ToHg38.over.chain.gz already exists. Skipping.${NC}"
-else
-    echo "Downloading hg18ToHg38.over.chain.gz..."
-    curl -L -o "${TARGET_DIR}/liftOver/hg18ToHg38.over.chain.gz" \
-        "https://hgdownload.soe.ucsc.edu/goldenPath/hg18/liftOver/hg18ToHg38.over.chain.gz"
-    echo -e "${GREEN}✓ hg18ToHg38.over.chain.gz downloaded${NC}"
-fi
-
-# hg19 to hg38
-if [ -f "${TARGET_DIR}/liftOver/hg19ToHg38.over.chain.gz" ]; then
-    echo -e "${YELLOW}hg19ToHg38.over.chain.gz already exists. Skipping.${NC}"
-else
-    echo "Downloading hg19ToHg38.over.chain.gz..."
-    curl -L -o "${TARGET_DIR}/liftOver/hg19ToHg38.over.chain.gz" \
-        "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz"
-    echo -e "${GREEN}✓ hg19ToHg38.over.chain.gz downloaded${NC}"
-fi
-
-# hg38 to hg38 (identity - for consistency)
-if [ -f "${TARGET_DIR}/liftOver/hg38ToHg38.over.chain.gz" ]; then
-    echo -e "${YELLOW}hg38ToHg38.over.chain.gz already exists. Skipping.${NC}"
-else
-    echo "Creating hg38ToHg38.over.chain.gz (identity mapping)..."
-    # Create a minimal identity chain file
-    echo "chain 1 chr1 248956422 + 0 248956422 chr1 248956422 + 0 248956422 1" | gzip > "${TARGET_DIR}/liftOver/hg38ToHg38.over.chain.gz"
-    echo -e "${GREEN}✓ hg38ToHg38.over.chain.gz created${NC}"
-fi
-echo ""
-
-# Verify downloads
-echo -e "${YELLOW}[5/5] Verifying downloads...${NC}"
-echo ""
-
-MISSING_FILES=0
-
-# Check hg38 reference
-if [ -f "${TARGET_DIR}/Genome/hg38.fa.gz" ]; then
-    SIZE=$(du -h "${TARGET_DIR}/Genome/hg38.fa.gz" | cut -f1)
-    echo -e "${GREEN}✓${NC} hg38.fa.gz (${SIZE})"
-else
-    echo -e "${RED}✗${NC} hg38.fa.gz MISSING"
-    MISSING_FILES=$((MISSING_FILES + 1))
-fi
-
-# Check liftOver files
-for assembly in hg18 hg19 hg38; do
-    FILE="${TARGET_DIR}/liftOver/${assembly}ToHg38.over.chain.gz"
-    if [ -f "$FILE" ]; then
-        SIZE=$(du -h "$FILE" | cut -f1)
-        echo -e "${GREEN}✓${NC} ${assembly}ToHg38.over.chain.gz (${SIZE})"
-    else
-        echo -e "${RED}✗${NC} ${assembly}ToHg38.over.chain.gz MISSING"
-        MISSING_FILES=$((MISSING_FILES + 1))
+# Function to download and process a reference genome
+download_genome() {
+    local assembly=$1
+    local output_file="${REF_DIR}/Genome/${assembly}.fa.gz"
+    local fai_file="${output_file}.fai"
+    
+    if [ -f "$output_file" ] && [ -f "$fai_file" ]; then
+        echo -e "${YELLOW}${assembly}.fa.gz already exists with index. Skipping.${NC}"
+        return 0
     fi
-done
+    
+    echo -e "${YELLOW}Downloading and processing ${assembly} reference genome...${NC}"
+    
+    # Check for required tools
+    if ! command -v bgzip &> /dev/null; then
+        echo -e "${RED}Error: bgzip not found. Please install htslib/samtools.${NC}"
+        exit 1
+    fi
+    
+    if ! command -v samtools &> /dev/null; then
+        echo -e "${RED}Error: samtools not found. Please install samtools.${NC}"
+        exit 1
+    fi
+    
+    # Download, decompress, and recompress with bgzip
+    echo "Downloading ${assembly}.fa.gz from UCSC..."
+    if command -v wget &> /dev/null; then
+        wget -q --show-progress -O - \
+            "https://hgdownload.soe.ucsc.edu/goldenPath/${assembly}/bigZips/${assembly}.fa.gz" | \
+            gunzip | bgzip -c > "$output_file"
+    else
+        curl -L --progress-bar \
+            "https://hgdownload.soe.ucsc.edu/goldenPath/${assembly}/bigZips/${assembly}.fa.gz" | \
+            gunzip | bgzip -c > "$output_file"
+    fi
+    
+    echo "Generating .fai index..."
+    samtools faidx "$output_file"
+    
+    echo -e "${GREEN}✓ ${assembly}.fa.gz ready ($(du -h "$output_file" | cut -f1))${NC}"
+}
+
+# Function to download chain file
+download_chain() {
+    local source=$1
+    local chain_file="${REF_DIR}/liftOver/${source}ToHg38.over.chain.gz"
+    
+    if [ -f "$chain_file" ]; then
+        echo -e "${YELLOW}${source}ToHg38.over.chain.gz already exists. Skipping.${NC}"
+        return 0
+    fi
+    
+    echo -e "${YELLOW}Downloading ${source}ToHg38 chain file...${NC}"
+    if command -v wget &> /dev/null; then
+        wget -q --show-progress -O "$chain_file" \
+            "https://hgdownload.cse.ucsc.edu/goldenpath/${source}/liftOver/${source}ToHg38.over.chain.gz"
+    else
+        curl -L --progress-bar -o "$chain_file" \
+            "https://hgdownload.cse.ucsc.edu/goldenpath/${source}/liftOver/${source}ToHg38.over.chain.gz"
+    fi
+    
+    echo -e "${GREEN}✓ ${source}ToHg38.over.chain.gz ready ($(du -h "$chain_file" | cut -f1))${NC}"
+}
+
+# Always download hg38 (destination assembly for liftover)
+echo -e "${GREEN}[1/3] Preparing destination assembly (hg38)...${NC}"
+download_genome "hg38"
+echo ""
+
+# Download source assembly if different from hg38
+if [ "$SOURCE_ASSEMBLY" != "hg38" ]; then
+    echo -e "${GREEN}[2/3] Preparing source assembly (${SOURCE_ASSEMBLY})...${NC}"
+    download_genome "$SOURCE_ASSEMBLY"
+    echo ""
+    
+    echo -e "${GREEN}[3/3] Downloading chain file...${NC}"
+    download_chain "$SOURCE_ASSEMBLY"
+    echo ""
+else
+    echo -e "${GREEN}[2/3] Source assembly is hg38 - no liftover needed${NC}"
+    echo -e "${GREEN}[3/3] Skipping chain file download${NC}"
+    echo ""
+fi
+
+# Summary
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}✓ Reference setup complete!${NC}"
+echo ""
+echo "Directory structure:"
+echo "${REF_DIR}/"
+echo "├── Genome/"
+
+if [ "$SOURCE_ASSEMBLY" != "hg38" ]; then
+    echo "│   ├── ${SOURCE_ASSEMBLY}.fa.gz"
+    echo "│   ├── ${SOURCE_ASSEMBLY}.fa.gz.fai"
+fi
+
+echo "│   ├── hg38.fa.gz"
+echo "│   └── hg38.fa.gz.fai"
+
+if [ "$SOURCE_ASSEMBLY" != "hg38" ]; then
+    echo "└── liftOver/"
+    echo "    └── ${SOURCE_ASSEMBLY}ToHg38.over.chain.gz"
+fi
 
 echo ""
-echo -e "${GREEN}========================================${NC}"
-
-if [ $MISSING_FILES -eq 0 ]; then
-    echo -e "${GREEN}✓ All reference files downloaded successfully!${NC}"
-    echo ""
-    echo "Directory structure:"
-    echo "${TARGET_DIR}/"
-    echo "├── Genome/"
-    echo "│   ├── hg38.fa.gz"
-    echo "│   └── hg38.fa.gz.fai"
-    echo "└── liftOver/"
-    echo "    ├── hg18ToHg38.over.chain.gz"
-    echo "    ├── hg19ToHg38.over.chain.gz"
-    echo "    └── hg38ToHg38.over.chain.gz"
-    echo ""
-    echo -e "${GREEN}You can now run the pipeline with:${NC}"
-    echo "  nextflow run main.nf -profile standard -params-file params.yml"
-    echo ""
-    exit 0
-else
-    echo -e "${RED}✗ Some files are missing!${NC}"
-    echo "Please check your internet connection and try again."
-    exit 1
-fi
+echo -e "${GREEN}Ready for pipeline execution!${NC}"

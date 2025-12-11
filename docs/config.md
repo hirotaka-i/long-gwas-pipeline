@@ -433,7 +433,7 @@ We need to use Singularity instead of Docker on Biowulf. First, convert the Dock
 ```bash
 mkdir -p $LONG_GWAS_DIR/Docker
 cd $LONG_GWAS_DIR/Docker
-singularity build gwas-pipeline_survival.sif docker://hirotakai/longgwas:v2.0.1
+singularity build gwas-pipeline_survival.sif docker://hirotakai/longgwas:slim
 ```
 
 

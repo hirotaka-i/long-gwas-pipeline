@@ -153,3 +153,5 @@ example/
 *.env
 params_*.yml
 References/
+unnamed_project/
+test_*/

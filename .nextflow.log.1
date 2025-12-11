@@ -1,0 +1,150 @@
+Dec-11 09:49:48.354 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main.nf -profile standard
+Dec-11 09:49:48.385 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 25.10.0
+Dec-11 09:49:48.405 [main] DEBUG nextflow.config.ConfigBuilder - Found config local: /Users/iwakihiroshinao/long-gwas-pipeline/nextflow.config
+Dec-11 09:49:48.406 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /Users/iwakihiroshinao/long-gwas-pipeline/nextflow.config
+Dec-11 09:49:48.419 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `standard`
+Dec-11 09:49:48.759 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/Users/iwakihiroshinao/.nextflow/plugins; core-plugins: nf-amazon@3.4.1,nf-azure@1.20.2,nf-cloudcache@0.5.0,nf-codecommit@0.5.0,nf-console@1.3.0,nf-google@1.23.3,nf-k8s@1.2.2,nf-tower@1.17.1,nf-wave@1.16.1
+Dec-11 09:49:48.765 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+Dec-11 09:49:48.765 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+Dec-11 09:49:48.766 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+Dec-11 09:49:48.774 [main] DEBUG nextflow.util.RetryConfig - Missing nextflow session - using default retry config
+Dec-11 09:49:48.856 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+Dec-11 09:49:48.857 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins default=[]
+Dec-11 09:49:48.857 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins resolved requirement=[]
+Dec-11 09:49:48.863 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /Users/iwakihiroshinao/.nextflow/secrets/store.json
+Dec-11 09:49:48.864 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@7be2f29a] - activable => nextflow.secret.LocalSecretsProvider@7be2f29a
+Dec-11 09:49:48.869 [main] DEBUG nextflow.cli.CmdRun - Applied DSL=2 from script declaration
+Dec-11 09:49:48.875 [main] DEBUG nextflow.cli.CmdRun - Launching `main.nf` [pensive_thompson] DSL2 - revision: 871e2d18aa
+Dec-11 09:49:48.895 [main] DEBUG nextflow.Session - Session UUID: 52f60e13-922e-401a-b9ce-65ce714025e5
+Dec-11 09:49:48.895 [main] DEBUG nextflow.Session - Run name: pensive_thompson
+Dec-11 09:49:48.896 [main] DEBUG nextflow.Session - Executor pool size: 11
+Dec-11 09:49:48.899 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
+Dec-11 09:49:48.901 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=33; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+Dec-11 09:49:48.940 [main] DEBUG nextflow.cli.CmdRun - 
+  Version: 25.10.0 build 0
+  Created: 22-10-2025 15:12 UTC (11:12 EDT)
+  System: Mac OS X 15.6.1
+  Runtime: Groovy 4.0.28 on OpenJDK 64-Bit Server VM 25.0.1
+  Encoding: UTF-8 (UTF-8)
+  Process: 91387@hiroMBP23.local [127.0.0.1]
+  CPUs: 11 - Mem: 18 GB (183.8 MB) - Swap: 13 GB (1.2 GB)
+Dec-11 09:49:48.948 [main] DEBUG nextflow.Session - Work-dir: /Users/iwakihiroshinao/long-gwas-pipeline/unnamed_project/work [Mac OS X]
+Dec-11 09:49:48.962 [main] DEBUG nextflow.executor.ExecutorFactory - Extension executors providers=[]
+Dec-11 09:49:48.966 [main] DEBUG nextflow.Session - Observer factory (v2): LinObserverFactory
+Dec-11 09:49:48.967 [main] DEBUG nextflow.Session - Observer factory (v2): DefaultObserverFactory
+Dec-11 09:49:48.984 [main] DEBUG nextflow.cache.CacheFactory - Using Nextflow cache factory: nextflow.cache.DefaultCacheFactory
+Dec-11 09:49:48.988 [main] DEBUG nextflow.util.CustomThreadPool - Creating default thread pool > poolSize: 12; maxThreads: 1000
+Dec-11 09:49:49.014 [main] DEBUG nextflow.Session - Session start
+Dec-11 09:49:49.289 [main] DEBUG nextflow.script.ScriptRunner - > Launching execution
+Dec-11 09:49:49.292 [main] INFO  nextflow.Nextflow -  LONG-GWAS - GWAS P I P E L I N E
+ ======================================
+ Chunk size for genetic processing        : 30000
+ Kinship matrix threshold                 : 0.177
+ R2 threshold                             : -9
+ MAF threshold                            : 0.05
+ data ancestry                            : EUR
+ genetic data assemble                    : hg19
+ phenotype name                           : y
+ covariates                               : SEX age_at_baseline
+ analysis                                 : glm
+ project directory                        : /Users/iwakihiroshinao/long-gwas-pipeline/unnamed_project
+ dataset                                  : TEST
+ 
+Dec-11 09:49:49.743 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:medium` matches labels `medium` for process with name GENETICQC
+Dec-11 09:49:49.746 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.746 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.749 [main] DEBUG nextflow.executor.Executor - [warm up] executor > local
+Dec-11 09:49:49.753 [main] DEBUG n.processor.LocalPollingMonitor - Creating local task monitor for executor 'local' > cpus=11; memory=18 GB; capacity=11; pollInterval=100ms; dumpInterval=5m
+Dec-11 09:49:49.754 [main] DEBUG n.processor.TaskPollingMonitor - >>> barrier register (monitor: local)
+Dec-11 09:49:49.762 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'GENETICQC': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.780 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:small` matches labels `small` for process with name MERGER_CHUNKS
+Dec-11 09:49:49.781 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.781 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.781 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'MERGER_CHUNKS': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.795 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:large_mem` matches labels `large_mem` for process with name MERGER_CHRS
+Dec-11 09:49:49.796 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.796 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.796 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'MERGER_CHRS': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.799 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:large_mem` matches labels `large_mem` for process with name GWASQC
+Dec-11 09:49:49.800 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.800 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.800 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'GWASQC': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.802 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:small` matches labels `small` for process with name GETPHENOS
+Dec-11 09:49:49.802 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.802 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.802 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'GETPHENOS': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.805 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:medium` matches labels `medium` for process with name REMOVEOUTLIERS
+Dec-11 09:49:49.807 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.807 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.807 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'REMOVEOUTLIERS': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.807 [main] DEBUG nextflow.processor.TaskProcessor - Creating *combiner* operator for each param(s) at index(es): [2]
+Dec-11 09:49:49.811 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:large_mem` matches labels `large_mem` for process with name COMPUTE_PCA
+Dec-11 09:49:49.813 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.813 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.813 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'COMPUTE_PCA': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.813 [main] DEBUG nextflow.processor.TaskProcessor - Creating *combiner* operator for each param(s) at index(es): [0]
+Dec-11 09:49:49.814 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:small` matches labels `small` for process with name MERGE_PCA
+Dec-11 09:49:49.815 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.815 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.815 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'MERGE_PCA': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.817 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:small` matches labels `small` for process with name EXPORT_PLINK
+Dec-11 09:49:49.818 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.818 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.818 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'EXPORT_PLINK': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.820 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:medium` matches labels `medium` for process with name GWASGLM
+Dec-11 09:49:49.821 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.821 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.821 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'GWASGLM': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.821 [main] DEBUG nextflow.processor.TaskProcessor - Creating *combiner* operator for each param(s) at index(es): [1, 2]
+Dec-11 09:49:49.825 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.825 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.825 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'SAVEGWAS': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.828 [main] DEBUG n.script.dsl.ProcessConfigBuilder - Config settings `withLabel:medium` matches labels `medium` for process with name MANHATTAN
+Dec-11 09:49:49.829 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+Dec-11 09:49:49.829 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Dec-11 09:49:49.829 [main] DEBUG nextflow.processor.TaskProcessor - Creating process 'MANHATTAN': maxForks=0; fair=false; array=0
+Dec-11 09:49:49.829 [main] DEBUG nextflow.processor.TaskProcessor - Creating *combiner* operator for each param(s) at index(es): [0]
+Dec-11 09:49:49.830 [main] DEBUG nextflow.Session - Workflow process names [dsl2]: MANHATTAN, MERGE_PCA, MERGER_CHRS, GWASQC, GETPHENOS, GWASGLM, GWASGALLOP, REMOVEOUTLIERS, GWASCPH, MERGER_CHUNKS, GALLOPCOX_INPUT, GENETICQC, RAWFILE_EXPORT, SAVEGWAS, EXPORT_PLINK, COMPUTE_PCA
+Dec-11 09:49:49.831 [main] DEBUG nextflow.Session - Igniting dataflow network (19)
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GENETICQC
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > MERGER_CHUNKS
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > MERGER_CHRS
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GWASQC
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GETPHENOS
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > REMOVEOUTLIERS
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > REMOVEOUTLIERS
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > COMPUTE_PCA
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > COMPUTE_PCA
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > MERGE_PCA
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > EXPORT_PLINK
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GWASGLM
+Dec-11 09:49:49.834 [PathVisitor-2] DEBUG nextflow.file.PathVisitor - files for syntax: glob; folder: /Users/iwakihiroshinao/long-gwas-pipeline/example/genotype/example.vcf/; pattern: chr2[0-2].vcf; options: [:]
+Dec-11 09:49:49.834 [PathVisitor-1] DEBUG nextflow.file.PathVisitor - files for syntax: glob; folder: /Users/iwakihiroshinao/long-gwas-pipeline/unnamed_project/TEST/p1_run_cache/; pattern: *; options: [checkIfExists:false]
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > GWASGLM
+Dec-11 09:49:49.834 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > SAVEGWAS
+Dec-11 09:49:49.835 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > MANHATTAN
+Dec-11 09:49:49.835 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > MANHATTAN
+Dec-11 09:49:49.836 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
+  Script_d87d101a003b8bd7: /Users/iwakihiroshinao/long-gwas-pipeline/modules/results.nf
+  Script_10ce1b28d3697cb3: /Users/iwakihiroshinao/long-gwas-pipeline/modules/dataprep.nf
+  Script_2cf0e6c547ed95a5: /Users/iwakihiroshinao/long-gwas-pipeline/modules/qc.nf
+  Script_6d2c1c2c9b9c9329: /Users/iwakihiroshinao/long-gwas-pipeline/main.nf
+  Script_9c55548a7c59aa5b: /Users/iwakihiroshinao/long-gwas-pipeline/modules/gwas.nf
+Dec-11 09:49:49.836 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination 
+Dec-11 09:49:49.836 [main] DEBUG nextflow.Session - Session await
+Dec-11 09:49:49.837 [PathVisitor-1] DEBUG nextflow.file.PathVisitor - No such file or directory: /Users/iwakihiroshinao/long-gwas-pipeline/unnamed_project/TEST/p1_run_cache/ -- Skipping visit
+Dec-11 09:49:49.837 [PathVisitor-2] DEBUG nextflow.file.PathVisitor - No such file or directory: /Users/iwakihiroshinao/long-gwas-pipeline/example/genotype/example.vcf/ -- Skipping visit
+Dec-11 09:49:49.841 [Actor Thread 16] DEBUG nextflow.file.SortFileCollector - FileCollector temp dir not removed: null
+Dec-11 09:49:49.841 [Actor Thread 8] DEBUG nextflow.file.SortFileCollector - FileCollector temp dir not removed: null
+Dec-11 09:49:49.898 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+Dec-11 09:49:49.899 [Task submitter] INFO  nextflow.Session - [22/ec1f95] Submitted process > GETPHENOS
+Dec-11 09:49:57.480 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 1; name: GETPHENOS; status: COMPLETED; exit: 0; error: -; workDir: /Users/iwakihiroshinao/long-gwas-pipeline/unnamed_project/work/22/ec1f9512aa80830118f8e11c81aa2d]
+Dec-11 09:49:57.481 [Task monitor] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'TaskFinalizer' minSize=10; maxSize=33; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+Dec-11 09:49:57.502 [main] DEBUG nextflow.Session - Session await > all processes finished
+Dec-11 09:49:57.583 [Task monitor] DEBUG n.processor.TaskPollingMonitor - <<< barrier arrives (monitor: local) - terminating tasks monitor poll loop
+Dec-11 09:49:57.583 [main] DEBUG nextflow.Session - Session await > all barriers passed
+Dec-11 09:49:57.585 [main] DEBUG nextflow.util.ThreadPoolManager - Thread pool 'TaskFinalizer' shutdown completed (hard=false)
+Dec-11 09:49:57.588 [main] DEBUG n.trace.WorkflowStatsObserver - Workflow completed > WorkflowStats[succeededCount=1; failedCount=0; ignoredCount=0; cachedCount=0; pendingCount=0; submittedCount=0; runningCount=0; retriesCount=0; abortedCount=0; succeedDuration=15s; failedDuration=0ms; cachedDuration=0ms;loadCpus=0; loadMemory=0; peakRunning=1; peakCpus=2; peakMemory=6 GB; ]
+Dec-11 09:49:57.644 [main] DEBUG nextflow.cache.CacheDB - Closing CacheDB done
+Dec-11 09:49:57.667 [main] DEBUG nextflow.util.ThreadPoolManager - Thread pool 'FileTransfer' shutdown completed (hard=false)
+Dec-11 09:49:57.668 [main] DEBUG nextflow.script.ScriptRunner - > Execution complete -- Goodbye

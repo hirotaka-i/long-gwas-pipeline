@@ -52,6 +52,6 @@ process MANHATTAN {
 
   script:
     """
-    manhattan.py --input ${input_file} --model ${model} --suffix ${params.out}
+    manhattan.py --input ${input_file} --model ${model}
     """
 }

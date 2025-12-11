@@ -25,7 +25,7 @@ process GWASGLM {
     def cohort = samplelist.getName()
     m = cohort =~ /(.*)_analyzed.tsv/
     cohort = m[0][1]
-    def outfile = "${cohort}_${fSimple}.${params.out}"
+    def outfile = "${cohort}_${fSimple}"
 
     """
     set -x
@@ -77,7 +77,7 @@ process GWASGALLOP {
     def m = []
     def outfile = rawfile.getName()
     m = outfile =~ /(.*).raw/
-    outfile = "${m[0][1]}.${params.out}"
+    outfile = "${m[0][1]}"
 
     def getkey = []
     def pop_pheno = samplelist.getName()
@@ -120,7 +120,7 @@ process GWASCPH {
     def m = []
     def outfile = rawfile.getName()
     m = outfile =~ /(.*).raw/
-    outfile = "${m[0][1]}.${params.out}.coxph"
+    outfile = "${m[0][1]}.coxph"
 
     def getkey = []
     def pop_pheno = samplelist.getName()

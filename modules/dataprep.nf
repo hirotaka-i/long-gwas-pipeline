@@ -45,7 +45,7 @@ process GETPHENOS {
 process REMOVEOUTLIERS {
   scratch true
   label 'medium'
-  storeDir "${STORE_DIR}/${params.dataset}/p3_COVARIATES_QC/${params.out}"
+  storeDir "${STORE_DIR}/${params.dataset}/p3_COVARIATES_QC"
 
   input:
     path samplelist

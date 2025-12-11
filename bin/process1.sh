@@ -1,6 +1,6 @@
 #!/bin/bash
 # Take the vcf file (genotyped or imputed)
-# Return: pass(&R2)-filtered, split, left-normalized, autosomal-par, hg38-ref-alt-aligned SNPs with mac >=2. geno < 0.05
+# Return: pass(&R2)-filtered, lifted to hg38 (if needed), split, left-normalized, autosomal-par, hg38-ref-alt-aligned SNPs with mac >=2. geno < 0.05
 
 # Parameters
 N=$1 # Threads to use
@@ -15,61 +15,75 @@ FILE=$6 # Base file name. can be anything as long as unique
 # Default to Docker paths if RESOURCE_DIR not set (for backward compatibility)
 RESOURCE_DIR=${RESOURCE_DIR:-/srv/GWAS-Pipeline/References}
 FA=${RESOURCE_DIR}/Genome/hg38.fa.gz
-LIFTOVERDATA=${RESOURCE_DIR}/liftOver/${ASSEMBLY}ToHg38.over.chain.gz
+LIFTOVERCHAIN=${RESOURCE_DIR}/liftOver/${ASSEMBLY}ToHg38.over.chain.gz
 
 
 ######## start processing ###############################
-# Filter PASS (&R2) > Split > Create Plink binary (only keep autosome + par)
+# Step 1: Filter PASS (&R2 if imputed) and add "chr" prefix if missing
 ## Different pipeline for imputed and genotyped (R2THRES>0....imputed)
 if [[ $R2THRES > 0 ]]
 then 
     bcftools view -f '.,PASS' \
                   -i "INFO/R2>${R2THRES}" ${VFILE} \
-                  -Oz -o ${FILE}.vcf.gz --threads ${N} # get PASS(or .) variant and R2>R2THRES
-
-    bcftools norm -m-both ${FILE}.vcf.gz \
-                  -Oz -o ${FILE}_split.vcf.gz --threads ${N} # split
-
-    plink2 --threads ${N} \
-           --vcf ${FILE}_split.vcf.gz dosage=DS \
-           --make-pgen --allow-extra-chr --autosome-par --out ${FILE}_split # Import dosage
+                  -Oz -o ${FILE}_filtered_temp.vcf.gz --threads ${N} # get PASS(or .) variant and R2>R2THRES
 else
     bcftools view -f '.,PASS' ${VFILE} \
-                  -Oz -o ${FILE}.vcf.gz --threads ${N} 
-    bcftools norm -m-both ${FILE}.vcf.gz \
-                  -Oz -o ${FILE}_split.vcf.gz --threads ${N} # split
+                  -Oz -o ${FILE}_filtered_temp.vcf.gz --threads ${N}
+fi
+
+# Check if chromosomes need "chr" prefix and add if missing
+FIRST_CHR=$(bcftools view -H ${FILE}_filtered_temp.vcf.gz | head -1 | cut -f1)
+if [[ ! "$FIRST_CHR" =~ ^chr ]]; then
+    echo "Adding 'chr' prefix to chromosome names..."
+    bcftools annotate --rename-chrs <(bcftools view -h ${FILE}_filtered_temp.vcf.gz | \
+        grep "^##contig" | sed 's/.*ID=\([^,]*\).*/\1/' | \
+        awk '{if ($1 !~ /^chr/ && $1 ~ /^[0-9XYM]/) print $1"\tchr"$1; else print $1"\t"$1}') \
+        ${FILE}_filtered_temp.vcf.gz -Oz -o ${FILE}_filtered.vcf.gz --threads ${N}
+    rm ${FILE}_filtered_temp.vcf.gz
+else
+    echo "Chromosome names already have 'chr' prefix"
+    mv ${FILE}_filtered_temp.vcf.gz ${FILE}_filtered.vcf.gz
+fi
+
+# Step 2: Liftover to hg38 if needed (IN VCF FORMAT, BEFORE splitting)
+if [[ $ASSEMBLY = hg38 ]]
+then
+    # Already hg38, just copy
+    cp ${FILE}_filtered.vcf.gz ${FILE}_hg38.vcf.gz
+else
+    # Liftover using bcftools +liftover plugin
+    # Note: bcftools +liftover requires both source and destination reference genomes
+    ASSEMBLY_FA=${RESOURCE_DIR}/Genome/${ASSEMBLY}.fa.gz
+    
+    bcftools +liftover ${FILE}_filtered.vcf.gz \
+             --threads ${N} \
+             -Oz -o ${FILE}_hg38.vcf.gz \
+             -- \
+             -s ${ASSEMBLY_FA} \
+             -f ${FA} \
+             -c ${LIFTOVERCHAIN} \
+             --reject ${FILE}_rejected.vcf.gz \
+             --reject-type z
+fi
+
+# Step 3: Split multiallelic variants
+bcftools norm -m-both ${FILE}_hg38.vcf.gz \
+          -Oz -o ${FILE}_split.vcf.gz --threads ${N}
+
+# Step 4: Convert to plink format (after liftover and split)
+if [[ $R2THRES > 0 ]]
+then
+    plink2 --threads ${N} \
+           --vcf ${FILE}_split.vcf.gz dosage=DS \
+           --make-pgen --allow-extra-chr --autosome-par --out ${FILE}_split
+else
     plink2 --threads ${N} \
            --vcf ${FILE}_split.vcf.gz --make-pgen --allow-extra-chr --autosome-par --out ${FILE}_split
 fi
 
-# left-normalize using fasta file (hg38)
-if [[ $ASSEMBLY = hg38 ]]
-then
-    plink2 --threads ${N} \
-           --pfile ${FILE}_split --make-pgen --fa $FA --normalize --sort-vars --out ${FILE}_split_hg38_normalized
-else
-    # need to liftover to hg38 before normalization
-    ## giving temporary variant IDs (unique vID required for updating the map)
-    plink2 --threads ${N} \
-           --pfile ${FILE}_split --make-pgen \
-           --set-all-var-ids "chr@:#[${ASSEMBLY}]:\$r:\$a" \
-           --new-id-max-allele-len 999 truncate --out ${FILE}_split_temp_renamed
-    ## remove dup
-    plink2 --threads ${N} \
-           --pfile ${FILE}_split_temp_renamed --make-pgen --rm-dup exclude-all --out ${FILE}_split_temp_renamed_uniq
-    ## prepare input for liftover
-    grep -v '#' ${FILE}_split_temp_renamed_uniq.pvar | awk '{print "chr"$1,$2,$2+1,$3}' > ${FILE}_split.liftoverInput 
-    ### liftover
-    liftOver ${FILE}_split.liftoverInput ${LIFTOVERDATA} ${FILE}_split.liftoverOutput ${FILE}_split.unMapped
-    ### only keep variants in the same chromosome
-    awk '/chr'${CHRNUM}'\t/{print}'  ${FILE}_split.liftoverOutput > ${FILE}_split.liftoverOutput.chr${CHRNUM}
-    ### variant ID list to keep
-    cut -f4 ${FILE}_split.liftoverOutput.chr${CHRNUM} > ${FILE}_split.liftoverOutput.chr${CHRNUM}.ID
-    ## update the map
-    plink2 --threads ${N} --pfile ${FILE}_split_temp_renamed_uniq --make-pgen --update-map ${FILE}_split.liftoverOutput.chr${CHRNUM} 2 4 --extract ${FILE}_split.liftoverOutput.chr${CHRNUM}.ID --sort-vars --out ${FILE}_split_hg38 
-    ## noramlize with fa
-    plink2 --threads ${N} --pfile ${FILE}_split_hg38 --make-pgen --fa $FA --normalize --sort-vars --out ${FILE}_split_hg38_normalized
-fi
+# Step 5: Left-normalize using fasta file (hg38)
+plink2 --threads ${N} \
+       --pfile ${FILE}_split --make-pgen --fa $FA --normalize --sort-vars --out ${FILE}_split_hg38_normalized
 
 # select relevant snps with more than sigleton (For small cohorts, this process reduces a lot of variants)
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized --make-pgen --snps-only just-acgt --mac 2 --out ${FILE}_split_hg38_normalized_snps

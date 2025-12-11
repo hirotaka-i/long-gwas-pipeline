@@ -10,7 +10,7 @@ ENV PYTHONPATH=/usr/local/bin
 # Install all system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates netbase wget curl unzip git \
-    build-essential cmake gcc g++ make \
+    build-essential cmake gcc g++ make autoconf automake libtool \
     python3.10 python3-pip python3.10-dev \
     r-base r-base-dev \
     libc6-dev zlib1g-dev libbz2-dev libgsl-dev \
@@ -51,15 +51,6 @@ RUN apt-get update && apt-get install -y google-cloud-cli && \
 # Compiled bioinformatics tools - MODERATE speed, STABLE
 # ============================================
 
-# Download and compile bcftools
-RUN wget -qO- https://github.com/samtools/bcftools/releases/download/1.11/bcftools-1.11.tar.bz2 | tar -xj -C /usr/src
-
-# Compile and install bcftools
-RUN cd /usr/src/bcftools-1.11 && \
-    ./configure --enable-libgsl --enable-perl-filters && \
-    make && make install && \
-    rm -rf /usr/src/bcftools-1.11
-
 # Download METAL source
 RUN wget -qO- https://github.com/statgen/METAL/archive/refs/tags/2020-05-05.tar.gz | tar -xz -C /usr/src/
 
@@ -77,14 +68,14 @@ RUN wget -qO /usr/local/bin/bedtools https://github.com/arq5x/bedtools2/releases
 # ============================================
 
 # Install plink, plink2, gcta
-COPY docker/build-artifacts/plink2_linux_x86_64_20210920.zip /root/
+COPY docker/build-artifacts/plink2_linux_x86_64_20251205.zip /root/
 COPY docker/build-artifacts/plink_linux_x86_64_20210606.zip /root/
 COPY docker/build-artifacts/gcta_1.93.2beta.zip /root/
 COPY docker/build-artifacts/liftOver_20250627.zip /root/
 
 # Extract and install plink tools
 RUN cd /root && \
-    unzip plink2_linux_x86_64_20210920.zip && \
+    unzip plink2_linux_x86_64_20251205.zip && \
     unzip plink_linux_x86_64_20210606.zip && \
     unzip gcta_1.93.2beta.zip && \
     unzip liftOver_20250627.zip && \
@@ -94,22 +85,72 @@ RUN cd /root && \
     chmod +x /usr/local/bin/liftOver && \
     rm -rf *.zip gcta_1.93.2beta
 
-# Download reference files (required for pipeline operation)
-# These are large files but necessary for liftOver and normalization
-RUN mkdir -p /srv/GWAS-Pipeline/References/Genome && \
-    mkdir -p /srv/GWAS-Pipeline/References/liftOver && \
-    mkdir -p /srv/GWAS-Pipeline/References/ref_panel && \
-    wget -q -O /srv/GWAS-Pipeline/References/Genome/hg38.fa.gz \
-        "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz" && \
-    wget -q -O /srv/GWAS-Pipeline/References/liftOver/hg19ToHg38.over.chain.gz \
-        "https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz" && \
-    wget -q -O /srv/GWAS-Pipeline/References/liftOver/hg18ToHg38.over.chain.gz \
-        "https://hgdownload.cse.ucsc.edu/goldenpath/hg18/liftOver/hg18ToHg38.over.chain.gz"
-
 # Copy and extract ancestry reference panel
 COPY References/ancestry_ref_panel.tar.gz /root/
-RUN tar -xzf /root/ancestry_ref_panel.tar.gz -C /srv/GWAS-Pipeline/References/ref_panel --no-same-owner && \
+RUN mkdir -p /srv/GWAS-Pipeline/References/ref_panel && \
+    tar -xzf /root/ancestry_ref_panel.tar.gz -C /srv/GWAS-Pipeline/References/ref_panel --no-same-owner && \
     rm /root/ancestry_ref_panel.tar.gz
+
+# ============================================
+# bcftools with liftover plugin from freeseek/score
+# ============================================
+
+# Download and compile htslib (required by bcftools 1.20+)
+RUN git clone --depth 1 --recurse-submodules https://github.com/samtools/htslib.git /usr/src/htslib && \
+    cd /usr/src/htslib && \
+    autoreconf -i && \
+    ./configure && \
+    make && make install && \
+    ldconfig
+
+# Download and compile samtools (needed for faidx to index reference genomes)
+RUN git clone --depth 1 https://github.com/samtools/samtools.git /usr/src/samtools && \
+    cd /usr/src/samtools && \
+    autoheader && autoconf && \
+    ./configure --with-htslib=system && \
+    make && make install
+
+# Download bcftools 1.20 (stable release)
+RUN wget https://github.com/samtools/bcftools/releases/download/1.20/bcftools-1.20.tar.bz2 && \
+    tar xjf bcftools-1.20.tar.bz2 && \
+    rm bcftools-1.20.tar.bz2
+
+# Download liftover plugin from freeseek/score repository
+RUN cd bcftools-1.20/plugins && \
+    wget https://raw.githubusercontent.com/freeseek/score/master/liftover.c
+
+# Compile and install bcftools with liftover plugin
+RUN cd bcftools-1.20 && \
+    ./configure --enable-libgsl --enable-perl-filters --with-htslib=system && \
+    make && make install && \
+    cd / && rm -rf bcftools-1.20 /usr/src/htslib /usr/src/samtools
+
+# ============================================
+# Reference genome files - VERY SLOW but STABLE
+# Download AFTER samtools/bcftools are installed (needed for bgzip and faidx)
+# ============================================
+
+# Download and process reference genomes for bcftools +liftover
+# bcftools +liftover requires bgzip-compressed FASTA files with .fai index
+RUN mkdir -p /srv/GWAS-Pipeline/References/Genome && \
+    mkdir -p /srv/GWAS-Pipeline/References/liftOver && \
+    # Download and process hg38
+    wget -q -O - "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz" | \
+        gunzip | bgzip -c > /srv/GWAS-Pipeline/References/Genome/hg38.fa.gz && \
+    samtools faidx /srv/GWAS-Pipeline/References/Genome/hg38.fa.gz && \
+    # Download and process hg19
+    wget -q -O - "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz" | \
+        gunzip | bgzip -c > /srv/GWAS-Pipeline/References/Genome/hg19.fa.gz && \
+    samtools faidx /srv/GWAS-Pipeline/References/Genome/hg19.fa.gz && \
+    # Download hg18 (commented out - uncomment if needed)
+    # wget -q -O - "https://hgdownload.soe.ucsc.edu/goldenPath/hg18/bigZips/hg18.fa.gz" | \
+    #     gunzip | bgzip -c > /srv/GWAS-Pipeline/References/Genome/hg18.fa.gz && \
+    # samtools faidx /srv/GWAS-Pipeline/References/Genome/hg18.fa.gz && \
+    # Download chain files
+    wget -q -O /srv/GWAS-Pipeline/References/liftOver/hg19ToHg38.over.chain.gz \
+        "https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz"
+    # wget -q -O /srv/GWAS-Pipeline/References/liftOver/hg18ToHg38.over.chain.gz \
+    #     "https://hgdownload.cse.ucsc.edu/goldenpath/hg18/liftOver/hg18ToHg38.over.chain.gz"
 
 # ============================================
 # Python packages - Ordered by: SLOW/STABLE first, FAST/DEBUG-PRONE last

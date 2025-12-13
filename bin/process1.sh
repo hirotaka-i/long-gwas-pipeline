@@ -131,12 +131,15 @@ plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized --make-pgen --snps-o
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps --make-pgen --ref-from-fa force --fa $FA --out ${FILE}_split_hg38_normalized_snps_temp_aligned
 # remove the "Provisional variants" because provisional variants prevents loading on plink2
 grep 'PR$' ${FILE}_split_hg38_normalized_snps_temp_aligned.pvar | cut -f3 > ${FILE}_split_hg38_normalized_snps_temp_aligned_provisional.txt
-plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps --make-pgen --ref-from-fa force --fa $FA --exclude ${FILE}_split_hg38_normalized_snps_temp_aligned_provisional.txt --out ${FILE}_split_hg38_normalized_snps_aligned
+# exclude provisional variants first
+plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps --make-pgen --exclude ${FILE}_split_hg38_normalized_snps_temp_aligned_provisional.txt --out ${FILE}_split_hg38_normalized_snps_noprov
+# then align ref/alt independently
+plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_noprov --make-pgen --ref-from-fa force --fa $FA --out ${FILE}_split_hg38_normalized_snps_aligned
 # remame ID for standard chr:pos:ref:alt
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned --make-pgen --set-all-var-ids 'chr@:#:$r:$a' --out ${FILE}_split_hg38_normalized_snps_aligned_renamed
 # remove dup
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed --make-pgen --rm-dup exclude-all --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq
 # geno 0.1 filter (lenient because potentially mixed ancestry samples)
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq --make-pgen --geno 0.1 dosage --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01
-# convert to plink bed format with keep-allele-order for merging later
+# convert to plink bed format with keep-allele-order for merging in the next steps
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01 --keep-allele-order --make-bed --out ${FILE}_p1out

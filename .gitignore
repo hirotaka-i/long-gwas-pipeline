@@ -154,4 +154,4 @@ example/
 params_*.yml
 References/
 unnamed_project/
-test_*/
+test_*/docker/build-artifacts/

@@ -324,6 +324,9 @@ nextflow run main.nf -profile localtest -params-file params.yml
 
 **Note for Apple Silicon users:** Always use `--platform linux/amd64` flag.
 
+**Pushing to DockerHub:**
+```bash
+docker tag longgwas-local-test hirotakai/longgwas:<tab>
 ---
 
 ### 3. `adwb` Profile

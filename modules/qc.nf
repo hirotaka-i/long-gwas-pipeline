@@ -72,9 +72,11 @@ process MERGER_CHUNKS {
       set +x
 
       plink --merge-list ${mergelist} \
+        --keep-allele-order \
         --out ${vSimple}
       
       plink2 --bfile ${vSimple} \
+        --keep-allele-order \
         --make-pgen \
         --sort-vars \
         --out ${vSimple}
@@ -109,6 +111,7 @@ process MERGER_CHRS {
     cat $mergelist | uniq > tmp_mergefile.txt
     plink2 --memory ${task.memory.toMega()} \
       --pmerge-list "tmp_mergefile.txt" \
+      --keep-allele-order \
       --make-bed \
       --out "allchr_${params.dataset}_p2in"
     """

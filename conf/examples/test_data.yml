@@ -5,10 +5,10 @@
 # Note: Use ${projectDir} or absolute paths when running from GitHub
 input: "${projectDir}/example/genotype/chr2[0-2].vcf"
 covarfile: "${projectDir}/example/covariates.tsv"
-phenofile: "${projectDir}/example/phenotype.cs.tsv"
+phenofile: "${projectDir}/example/phenotype.surv.tsv"
 
 # Variable names in covariate/phenotype files
-pheno_name: "y"
+pheno_name: "surv_y"
 covariates: "SEX age_at_baseline"
 study_arm_col: "study_arm"
 time_col: "study_days"

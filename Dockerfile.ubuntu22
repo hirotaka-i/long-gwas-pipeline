@@ -138,7 +138,7 @@ RUN find /tmp -name "metal" -type f -executable -exec cp {} /usr/local/bin/metal
 # ============================================
 
 # Copy and extract ancestry reference panel
-COPY References/ancestry_ref_panel.tar.gz /root/
+COPY docker/ancestry_ref_panel.tar.gz /root/
 RUN mkdir -p /srv/GWAS-Pipeline/References/ref_panel && \
     tar -xzf /root/ancestry_ref_panel.tar.gz -C /srv/GWAS-Pipeline/References/ref_panel --no-same-owner && \
     rm /root/ancestry_ref_panel.tar.gz

@@ -155,3 +155,6 @@ params_*.yml
 References/
 unnamed_project/
 test_*/docker/build-artifacts/
+report-*.html 
+timeline-*.html 
+trace-*.txt

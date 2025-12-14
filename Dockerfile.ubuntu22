@@ -19,11 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common dirmngr gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Python symlinks
-RUN cd /usr/bin && ln -sf python3.10 python && ln -sf python3.10 python3
-
-# Upgrade pip
-RUN pip3 install --no-cache-dir --upgrade pip
+# Note: Python 3.10 will be installed via micromamba below
+# No system Python setup needed here
 
 # Install R packages from CRAN (latest stable versions)
 # Note: R 4.1.2 typically gets survival ~3.8.x, optparse ~1.7.x
@@ -48,80 +45,113 @@ RUN apt-get update && apt-get install -y google-cloud-cli && \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================
-# Compiled bioinformatics tools - MODERATE speed, STABLE
+# Install Micromamba for bioconda packages
+# Includes Python 3.10 and bioinformatics tools
 # ============================================
 
-# Copy and extract METAL source
-COPY docker/build-artifacts/METAL-2020-05-05.tar.gz /root/
-RUN cd /root && tar xzf METAL-2020-05-05.tar.gz -C /usr/src/ && rm METAL-2020-05-05.tar.gz
+ENV MAMBA_ROOT_PREFIX=/opt/micromamba
+ENV PATH=${MAMBA_ROOT_PREFIX}/bin:${PATH}
 
-# Compile and install METAL
-RUN cd /usr/src/METAL-2020-05-05 && mkdir build && cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && make && make install && \
-    ln -s /usr/src/METAL-2020-05-05/build/bin/metal /usr/local/bin/metal
-
-# Install bedtools
-RUN wget -qO /usr/local/bin/bedtools https://github.com/arq5x/bedtools2/releases/download/v2.30.0/bedtools.static.binary && \
-    chmod +x /usr/local/bin/bedtools
+# Install micromamba (extract to a temp dir so we don't touch /bin)
+RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+      | tar -xvj -C /tmp bin/micromamba && \
+    mv /tmp/bin/micromamba /usr/local/bin/micromamba && \
+    rm -rf /tmp/bin
 
 # ============================================
-# Binary tools and reference data - FAST, STABLE
+# Install Python 3.10 and bioinformatics tools via bioconda
+# PLINK, PLINK2, bedtools
+# Note: GCTA removed - not used in pipeline
 # ============================================
 
-# Install plink, plink2, gcta
-COPY docker/build-artifacts/plink2_linux_x86_64_20251205.zip /root/
-COPY docker/build-artifacts/plink_linux_x86_64_20210606.zip /root/
-COPY docker/build-artifacts/gcta_1.93.2beta.zip /root/
+# Create the base env directly at ${MAMBA_ROOT_PREFIX} (no -r flag needed)
+RUN /usr/local/bin/micromamba create -y -p ${MAMBA_ROOT_PREFIX} \
+    -c conda-forge -c bioconda \
+    python=3.10 \
+    plink=1.90b6.21 \
+    plink2=2.00a3.7 \
+    bedtools=2.31.0 && \
+    /usr/local/bin/micromamba clean -a -y
 
-# Extract and install plink tools
-RUN cd /root && \
-    unzip plink2_linux_x86_64_20251205.zip && \
-    unzip plink_linux_x86_64_20210606.zip && \
-    unzip gcta_1.93.2beta.zip && \
-    mv plink2 plink prettify /usr/local/bin/ && \
-    mv gcta_1.93.2beta/gcta64 /usr/local/bin/ && \
-    rm -rf *.zip gcta_1.93.2beta
+# ============================================
+# HTSlib, SAMtools, BCFtools from stable sources
+# Download and compile from official releases
+# ============================================
+
+# Versions to install
+ENV HTSLIB_VERSION=1.20
+ENV SAMTOOLS_VERSION=1.20
+ENV BCFTOOLS_VERSION=1.20
+
+# Download HTSlib from stable GitHub release
+RUN wget -q https://github.com/samtools/htslib/releases/download/${HTSLIB_VERSION}/htslib-${HTSLIB_VERSION}.tar.bz2 -O /tmp/htslib.tar.bz2 && \
+    cd /tmp && tar xjf htslib.tar.bz2 && \
+    cd htslib-${HTSLIB_VERSION} && \
+    autoreconf -i && \
+    ./configure && \
+    make && make install && \
+    ldconfig && \
+    rm -rf /tmp/htslib*
+
+# Download SAMtools from stable GitHub release
+RUN wget -q https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VERSION}/samtools-${SAMTOOLS_VERSION}.tar.bz2 -O /tmp/samtools.tar.bz2 && \
+    cd /tmp && tar xjf samtools.tar.bz2 && \
+    cd samtools-${SAMTOOLS_VERSION} && \
+    autoheader && autoconf && \
+    ./configure --with-htslib=system && \
+    make && make install && \
+    rm -rf /tmp/samtools*
+
+# Download BCFtools from stable GitHub release
+RUN wget -q https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VERSION}/bcftools-${BCFTOOLS_VERSION}.tar.bz2 -O /tmp/bcftools.tar.bz2 && \
+    cd /tmp && tar xjf bcftools.tar.bz2 && \
+    rm bcftools.tar.bz2
+
+# Download liftover plugin from freeseek/score repository
+# Try GitHub first, fallback to local backup if unavailable
+RUN wget -q https://raw.githubusercontent.com/freeseek/score/e777b9b1ce7ef89c3ec5e70e59e8ff0ba3b97fa5/liftover.c \
+    -O /tmp/bcftools-${BCFTOOLS_VERSION}/plugins/liftover.c || \
+    echo "Warning: Could not download liftover.c from GitHub, will use local backup"
+
+# Copy local backup if download failed
+COPY docker/build-artifacts/liftover.c /tmp/liftover_backup.c
+RUN if [ ! -s /tmp/bcftools-${BCFTOOLS_VERSION}/plugins/liftover.c ]; then \
+        echo "Using local backup of liftover.c"; \
+        cp /tmp/liftover_backup.c /tmp/bcftools-${BCFTOOLS_VERSION}/plugins/liftover.c; \
+    fi && \
+    rm /tmp/liftover_backup.c
+
+# Compile and install BCFtools with liftover plugin
+RUN cd /tmp/bcftools-${BCFTOOLS_VERSION} && \
+    ./configure --enable-libgsl --enable-perl-filters --with-htslib=system && \
+    make && make install && \
+    rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
+
+# ============================================
+# METAL - compile from source
+# ============================================
+
+ENV METAL_VERSION=2020-05-05
+
+# Download METAL from stable source (pre-compiled binary)
+RUN wget -q http://csg.sph.umich.edu/abecasis/Metal/download/Linux-metal.tar.gz -O /tmp/metal.tar.gz && \
+    tar xzf /tmp/metal.tar.gz -C /tmp && \
+    rm /tmp/metal.tar.gz
+
+# Install METAL binary
+RUN find /tmp -name "metal" -type f -executable -exec cp {} /usr/local/bin/metal \; && \
+    chmod +x /usr/local/bin/metal && \
+    rm -rf /tmp/generic-metal
+
+# ============================================
+# Ancestry reference panel
+# ============================================
 
 # Copy and extract ancestry reference panel
 COPY References/ancestry_ref_panel.tar.gz /root/
 RUN mkdir -p /srv/GWAS-Pipeline/References/ref_panel && \
     tar -xzf /root/ancestry_ref_panel.tar.gz -C /srv/GWAS-Pipeline/References/ref_panel --no-same-owner && \
     rm /root/ancestry_ref_panel.tar.gz
-
-# ============================================
-# bcftools with liftover plugin from freeseek/score
-# ============================================
-
-# Copy source archives and liftover plugin
-COPY docker/build-artifacts/htslib-1.20.tar.bz2 /root/
-COPY docker/build-artifacts/samtools-1.20.tar.bz2 /root/
-COPY docker/build-artifacts/bcftools-1.20.tar.bz2 /root/
-COPY docker/build-artifacts/liftover.c /root/
-
-# Extract and compile htslib (required by bcftools 1.20+)
-RUN cd /root && tar xjf htslib-1.20.tar.bz2 && \
-    cd htslib-1.20 && \
-    autoreconf -i && \
-    ./configure && \
-    make && make install && \
-    ldconfig
-
-# Extract and compile samtools (needed for faidx to index reference genomes)
-RUN cd /root && tar xjf samtools-1.20.tar.bz2 && \
-    cd samtools-1.20 && \
-    autoheader && autoconf && \
-    ./configure --with-htslib=system && \
-    make && make install
-
-# Extract bcftools and add liftover plugin
-RUN cd /root && tar xjf bcftools-1.20.tar.bz2 && \
-    cp liftover.c bcftools-1.20/plugins/
-
-# Compile and install bcftools with liftover plugin
-RUN cd /root/bcftools-1.20 && \
-    ./configure --enable-libgsl --enable-perl-filters --with-htslib=system && \
-    make && make install && \
-    cd /root && rm -rf *.tar.bz2 liftover.c htslib-1.20 samtools-1.20 bcftools-1.20
 
 # ============================================
 # Reference genome files - MOVED TO EXTERNAL
@@ -138,33 +168,34 @@ RUN mkdir -p /srv/GWAS-Pipeline/References/Genome && \
 # This maximizes Docker layer cache efficiency during development
 # ============================================
 
+# Upgrade pip first (using micromamba's Python via micromamba run)
+RUN micromamba run -n base pip install --no-cache-dir --upgrade pip
+
 # Install numpy 1.26.0 first (required by pandas 2.x)
 # Note: Upgrading from 1.24.3 to 1.26.0 to fix pandas 2.x compatibility
-RUN pip install --no-cache-dir 'numpy==1.26.0'
+RUN micromamba run -n base pip install --no-cache-dir 'numpy==1.26.0'
 
 # Install scipy with numpy 1.26.0 (rebuild for binary compatibility)
-RUN pip install --no-cache-dir 'scipy==1.10.1'
+RUN micromamba run -n base pip install --no-cache-dir 'scipy==1.10.1'
 
-# Install GenoTools from PyPI (SLOW ~60s, but STABLE - moved early for cache)
-# Pinned version for reproducibility
-RUN pip install --ignore-installed the-real-genotools==1.3.5
+# Note: GenoTools removed - not used in pipeline scripts
 
 # Install GALLOP dependencies (statsmodels for LME)
-RUN pip install statsmodels==0.13.5
+RUN micromamba run -n base pip install statsmodels==0.13.5
 
 # Install qmplot and plotly for visualization (pinned versions)
 # Constrain pandas to 2.1.x range (2.3.3 has read_csv bugs with numpy arrays)
 # User's local environment: pandas=2.1.4, numpy=1.26.3 works fine
-RUN pip install 'pandas>=2.1.0,<2.2.0' qmplot==0.3.3 plotly==5.23.0 kaleido==0.2.1
+RUN micromamba run -n base pip install 'pandas>=2.1.0,<2.2.0' qmplot==0.3.3 plotly==5.23.0 kaleido==0.2.1
 
 # Final numpy/scipy reinstall to ensure compatibility after all pip installs
 # Using numpy 1.26.0 for pandas 2.x compatibility
 # KEEP THIS LAST: Quick rebuild (3s) for debugging dependency issues
-RUN pip install --force-reinstall --no-cache-dir --no-deps 'numpy==1.26.0' 'scipy==1.10.1'
+RUN micromamba run -n base pip install --force-reinstall --no-cache-dir --no-deps 'numpy==1.26.0' 'scipy==1.10.1'
 
 # Install PyTables for HDF5 support (required by addi_qc_pipeline.py)
 # Installed last as a separate layer for easy cache reuse
-RUN pip install --no-cache-dir tables
+RUN micromamba run -n base pip install --no-cache-dir tables
 
 # NOTE: bin/ scripts are NOT copied into the Docker image
 # Nextflow automatically mounts the local bin/ directory to /workspace/bin/ inside containers

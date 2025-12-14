@@ -7,27 +7,82 @@ Complete guide to pipeline configuration and execution profiles.
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Configuration Files](#configuration-files)
-3. [Execution Profiles](#execution-profiles)
-4. [Resource Management](#resource-management)
-5. [Environment Variables](#environment-variables)
-6. [Profile Details](#profile-details)
-7. [Custom Configuration](#custom-configuration)
+2. [Modular Configuration System](#modular-configuration-system)
+3. [Running the Pipeline](#running-the-pipeline)
+4. [Configuration Files](#configuration-files)
+5. [Execution Profiles](#execution-profiles)
+6. [Resource Management](#resource-management)
+7. [Environment Variables](#environment-variables)
+8. [Profile Details](#profile-details)
+9. [Custom Configuration](#custom-configuration)
 
 ---
 
 ## Overview
 
-The longitudinal GWAS pipeline uses Nextflow's configuration system to manage:
+The longitudinal GWAS pipeline uses Nextflow's modular configuration system to manage:
 - **Execution environments** (local, HPC, cloud)
 - **Resource allocation** (CPU, memory, disk)
 - **Containerization** (Docker, Singularity)
 - **File paths** (inputs, outputs, cache)
 
 **Configuration is loaded from:**
-1. `nextflow.config` (in repository)
-2. `params.yml` (your parameter file via `-params-file`)
-3. Command line (`--parameter value`)
+1. `conf/base.config` (common settings for all profiles)
+2. `conf/params.config` (default parameter values)
+3. `conf/profiles/*.config` (profile-specific settings)
+4. `params.yml` (your parameter file via `-params-file`)
+5. Command line (`--parameter value`)
+
+## Modular Configuration System
+
+The pipeline now uses a modular configuration structure:
+
+```
+conf/
+├── base.config          # Common settings (reports, trace, manifest)
+├── params.config        # Default parameter values
+├── profiles/            # Profile-specific configurations
+│   ├── standard.config  # Local/standard HPC
+│   ├── localtest.config # Testing with limited resources
+│   ├── biowulf.config   # NIH Biowulf cluster
+│   ├── gcb.config       # UNC Longleaf/Google Cloud
+│   └── adwb.config      # UNC Advanced Research Computing
+└── examples/            # Example parameter files
+    ├── test_data.yml
+    ├── full_genome.yml
+    └── skip_pop_split.yml
+```
+
+## Running the Pipeline
+
+### Local Execution (from cloned repository)
+
+```bash
+# Basic run with example data
+nextflow run main.nf -profile standard -params-file conf/examples/test_data.yml
+
+# With custom parameters
+nextflow run main.nf -profile standard --input "path/to/*.vcf.gz" --dataset "MY_DATA"
+```
+
+### Remote Execution (from GitHub - no clone needed)
+
+```bash
+# Run from GitHub main branch
+nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file myparams.yml
+
+# Run specific version/tag
+nextflow run hirotaka-i/long-gwas-pipeline -r v2.0 -profile standard -params-file myparams.yml
+
+# Latest release
+nextflow run hirotaka-i/long-gwas-pipeline -r latest -profile standard -params-file myparams.yml
+```
+
+**Benefits of remote execution:**
+- No need to clone repository
+- Version pinning via `-r` flag
+- Automatic updates with `nextflow pull`
+- Clean separation of code and data
 
 **Priority:** Command line > params.yml > nextflow.config
 

@@ -73,12 +73,13 @@ process MERGER_CHUNKS {
 
       plink --merge-list ${mergelist} \
         --keep-allele-order \
+        --threads ${task.cpus} \
         --out ${vSimple}
       
       plink2 --bfile ${vSimple} \
-        --keep-allele-order \
         --make-pgen \
         --sort-vars \
+        --threads ${task.cpus} \
         --out ${vSimple}
       """
     } else {
@@ -88,6 +89,7 @@ process MERGER_CHUNKS {
       plink2 -pfile ${vSimple}.1_p1out \
         --make-pgen \
         --sort-vars \
+        --threads ${task.cpus} \
         --out ${vSimple}
       """
     }
@@ -110,10 +112,70 @@ process MERGER_CHRS {
     set -x
     cat $mergelist | uniq > tmp_mergefile.txt
     plink2 --memory ${task.memory.toMega()} \
+      --threads ${task.cpus} \
       --pmerge-list "tmp_mergefile.txt" \
       --keep-allele-order \
       --make-bed \
       --out "allchr_${params.dataset}_p2in"
+    """
+}
+
+/* LD Prune per chromosome (for skip population splitting mode) */
+process LD_PRUNE_CHR {
+  scratch true
+  storeDir "${STORE_DIR}/${params.dataset}/p2_ldprune_cache"
+  label 'medium'
+
+  input:
+    tuple path(psam), path(pgen), path(pvar), path(log)
+  output:
+    tuple path("${output}.psam"), path("${output}.pgen"), path("${output}.pvar")
+
+  script:
+    def base = pgen.getBaseName()
+    output = "${base}_pruned"
+    """
+    set +x
+    
+    # LD pruning per chromosome
+    plink2 --pfile ${base} \
+      --maf 0.05 \
+      --autosome \
+      --indep-pairwise 1000 50 0.05 \
+      --threads ${task.cpus} \
+      --out ${base}_prune
+    
+    plink2 --pfile ${base} \
+      --extract ${base}_prune.prune.in \
+      --make-pgen \
+      --threads ${task.cpus} \
+      --out ${output}
+    """
+}
+
+/* Simple QC without ancestry inference (for skip population splitting mode) */
+process SIMPLE_QC {
+  storeDir "${STORE_DIR}/${params.dataset}/p2_qc_pipeline_cache"
+  publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/SIMPLEQC_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.txt"
+  publishDir "${OUTPUT_DIR}/${params.dataset}/PLOTS/SIMPLEQC_PLOTS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.png"
+  label 'large_mem'
+  
+  input:
+    path "*" 
+  output:
+    path "${params.ancestry}_samplelist_p2out.h5", emit: simpleqc_h5_file 
+    path "*_qc_summary.txt", emit: simpleqc_summary
+    path "*_PC*.png", emit: simpleqc_plots
+  
+  script:
+    """
+    set +x
+    
+    simple_qc.sh \
+      "allchr_${params.dataset}_p2in" \
+      "${params.kinship}" \
+      "${params.ancestry}_samplelist_p2out" \
+      ${task.cpus}
     """
 }
 

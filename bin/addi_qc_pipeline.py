@@ -9,7 +9,8 @@ import argparse
 import plotly.express as px
 import plotly
 import plotly.io
-plotly.io.kaleido.scope.chromium_args = tuple([arg for arg in plotly.io.kaleido.scope.chromium_args if arg != "--disable-dev-shm-usage"])
+# Remove deprecated chromium args setting - not needed in newer versions
+# plotly.io.kaleido.scope.chromium_args was deprecated
 
 from qc import shell_do, het_prune, callrate_prune, merge_genos, get_outlier_ranges, ancestry_prune, king_prune, report_outliers, plot_3d
 
@@ -45,7 +46,7 @@ shell_do(make_bed_cmd)
 ancestry = ancestry_prune(het_out, ref_path, ref_labels, ancestry_out, target_label=pop)
 
 # make plots for pcs
-total_pcs = pd.read_csv(f"{ancestry['output']['plink_out']}.pca.eigenvec", sep='\s+', header=None, names=['FID','IID','PC1','PC2','PC3','PC4','PC5','PC6','PC7','PC8','PC9','PC10'], dtype={'FID':str,'IID':str})
+total_pcs = pd.read_csv(f"{ancestry['output']['plink_out']}.pca.eigenvec", sep=r'\s+', header=None, names=['FID','IID','PC1','PC2','PC3','PC4','PC5','PC6','PC7','PC8','PC9','PC10'], dtype={'FID':str,'IID':str})
 labels = pd.read_csv(ref_labels,sep='\t', header=None, names=['FID','IID','label'])
 pcs_merge = total_pcs.merge(labels, on=['FID','IID'], how='left')
 pcs_merge.label.fillna('new', inplace=True)
@@ -96,12 +97,12 @@ ancestry_keep = pd.read_csv(ancestry['output']['keep_samples'], sep='\t')
 pcs_out = f'{king_out}_pca'
 pca_cmd = f'plink2 --pfile {king_out} --pca --out {pcs_out}'
 shell_do(pca_cmd)
-pcs = pd.read_csv(f'{pcs_out}.eigenvec', sep='\s+')
+pcs = pd.read_csv(f'{pcs_out}.eigenvec', sep=r'\s+')
 
 king_table_out = f'{king_out}_table'
 king_table_cmd = f'plink2 --pfile {king_out} --make-king-table --out {king_table_out}'
 shell_do(king_table_cmd)
-kin = pd.read_csv(f'{king_table_out}.kin0', sep='\s+')
+kin = pd.read_csv(f'{king_table_out}.kin0', sep=r'\s+')
 
 # add to hdf
 outliers['outliers_df'].to_hdf(f'{out_path}.h5', key='outliers', mode='w')

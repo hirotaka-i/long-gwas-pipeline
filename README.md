@@ -54,65 +54,34 @@ $STORE_ROOT/
 - `STORE_ROOT`: Root directory for all pipeline data - can be local path or GCS bucket (default: `$PWD`)
 - `PROJECT_NAME`: Unique identifier for your project (default: `unnamed_project`)
 
-**Examples:**
+## Running the Pipeline
+
+### Local Execution (from cloned repository)
+
 ```bash
-# Local execution (defaults to current directory)
-nextflow run main.nf -profile standard -params-file params.yml
-# → Output: $PWD/unnamed_project/{cache,results,work}
+# Basic run with example data
+nextflow run main.nf -profile standard -params-file conf/examples/test_data.yml
 
-# Set custom project name
-export PROJECT_NAME="my_gwas_2025"
-nextflow run main.nf -profile standard -params-file params.yml
-# → Output: $PWD/my_gwas_2025/{cache,results,work}
-
-# Custom base directory and project name
-export STORE_ROOT="/data/gwas_projects"
-export PROJECT_NAME="parkinsons_study"
-nextflow run main.nf -profile standard -params-file params.yml
-# → Output: /data/gwas_projects/parkinsons_study/{cache,results,work}
-
-# Biowulf HPC
-export STORE_ROOT="/data/$USER/gwas"
-export PROJECT_NAME="cohort_analysis"
-nextflow run main.nf -profile biowulf -params-file params.yml
-# → Output: /data/$USER/gwas/cohort_analysis/{cache,results,work}
-
-# Google Cloud
-export STORE_ROOT="gs://my-bucket/gwas"
-export PROJECT_NAME="multi_cohort_2025"
-nextflow run main.nf -profile gcb -params-file params.yml
-# → Output: gs://my-bucket/gwas/multi_cohort_2025/{cache,results,work}
+# With custom parameters
+nextflow run main.nf -profile standard --input "path/to/*.vcf.gz" --dataset "MY_DATA"
 ```
 
-### Installation
+### Remote Execution (from GitHub - no clone needed)
 
-1. **Clone the repository:**
-   ```bash
-   git clone -b v2 https://github.com/hirotaka-i/long-gwas-pipeline.git
-   cd long-gwas-pipeline
-   ```
-2. **Extract example:**
-   ```bash
-   tar -xzf example/genotype/example.vcf.tar.gz -C example/genotype/
-   ```
-3. **Run the pipeline:**   
-   If docker is available, run:
-   ```bash
-   nextflow run main.nf -profile standard -params-file params.yml
-   ```
-   
-   - `main.nf`: Main Nextflow script
-   - `-profile`: Environment configuration (see Profiles below)
-   - `params.yml`: Parameter settings file
+```bash
+# Run from GitHub main branch
+nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file myparams.yml
 
-    **TIPS**: the following option will also creates some reports
-    ```
-    nextflow run main.nf -profile standard -params-file params.yml \
-    --report report.html\
-    --timeline timeline.html\
-    --trace trace.txt\
-    --dag flowchart.png
-    ```
+# Run specific version/tag
+nextflow run hirotaka-i/long-gwas-pipeline -r v2.0 -profile standard -params-file myparams.yml
+
+# Latest release
+nextflow run hirotaka-i/long-gwas-pipeline -r latest -profile standard -params-file myparams.yml
+```
+
+**TIPS**: `-with-dag flowchart.png` will also creates workflow DAG diagram in `flowchart.png`
+
+
 ## Profiles
 
 The pipeline supports multiple execution profiles for different environments, such as local, HPC, and cloud setups. Profiles define resource allocation, containerization, and execution settings.

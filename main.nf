@@ -43,8 +43,8 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
 /* 
  * Import consolidated modules
  */
-include { GENETICQC; MERGER_CHUNKS; MERGER_CHRS; GWASQC } from './modules/qc.nf'
-include { GETPHENOS; REMOVEOUTLIERS; COMPUTE_PCA; MERGE_PCA; GALLOPCOX_INPUT; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
+include { GENETICQC; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
+include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; GALLOPCOX_INPUT; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
 
@@ -168,46 +168,93 @@ workflow {
         .concat(cache)
         .set{ chrsqced }
 
-    // Prepare channels for downstream analysis
-    chrsqced
-        .groupTuple(by: 0)
-        .flatten()
-        .collate(5)
-        .set{ gallop_plink_input }
+    // Branch based on skip_pop_split mode
+    if (params.skip_pop_split) {
+        // Skip population splitting mode: LD prune per chromosome before merging
+        LD_PRUNE_CHR(chrsqced.groupTuple(by: 0).map{ vSimple, files -> files })
+        
+        LD_PRUNE_CHR.out
+            .flatten()
+            .map{ fn -> tuple(fn.getSimpleName(), fn) }
+            .set{ chrsqced_pruned }
+        
+        // For GWAS: use unpruned chromosome-level data
+        chrsqced
+            .groupTuple(by: 0)
+            .flatten()
+            .collate(5)
+            .set{ gallop_plink_input }
 
-    chrsqced
-        .groupTuple(by: 0)
-        .flatten()
-        .filter(~/.*pvar/)
-        .map{ it -> tuple(it.getSimpleName(), it) }
-        .set{ gallopcph_chunks }
+        chrsqced
+            .groupTuple(by: 0)
+            .flatten()
+            .filter(~/.*pvar/)
+            .map{ it -> tuple(it.getSimpleName(), it) }
+            .set{ gallopcph_chunks }
 
-    // Merge all chromosomes
-    chrsqced
-        .collectFile() { vSimple, f ->
-            ["allchr.mergelist.txt", f.getBaseName() + '\n'] }
-        .set{ list_files_merge }
-    chrsqced
-        .map{ vSimple, f -> file(f) }
-        .set{ chrfiles }
+        // For QC/PCA: merge pruned chromosomes
+        chrsqced_pruned
+            .collectFile() { vSimple, f ->
+                ["allchr.mergelist.txt", f.getBaseName() + '\n'] }
+            .set{ list_files_merge }
+        chrsqced_pruned
+            .map{ vSimple, f -> file(f) }
+            .set{ chrfiles }
 
-    MERGER_CHRS(list_files_merge, chrfiles.collect())
-    MERGER_CHRS.out
-        .flatten()
-        .filter{ fName -> ["pgen", "pvar", "psam"].contains(fName.getExtension()) }
-        .collect()
-        .set{ input_compute_pca }
+        MERGER_CHRS(list_files_merge, chrfiles.collect())
+        MERGER_CHRS.out
+            .flatten()
+            .filter{ fName -> ["pgen", "pvar", "psam"].contains(fName.getExtension()) }
+            .collect()
+            .set{ input_compute_pca }
 
-    // Run GWAS QC
-    GWASQC(MERGER_CHRS.out)
+        // Run simplified QC (no ancestry inference)
+        SIMPLE_QC(MERGER_CHRS.out)
+        qc_h5_file = SIMPLE_QC.out.simpleqc_h5_file
+
+    } else {
+        // Standard mode: merge first, then full QC with ancestry inference
+        
+        // Prepare channels for downstream analysis
+        chrsqced
+            .groupTuple(by: 0)
+            .flatten()
+            .collate(5)
+            .set{ gallop_plink_input }
+
+        chrsqced
+            .groupTuple(by: 0)
+            .flatten()
+            .filter(~/.*pvar/)
+            .map{ it -> tuple(it.getSimpleName(), it) }
+            .set{ gallopcph_chunks }
+11
+        // Merge all chromosomes
+        chrsqced
+            .collectFile() { vSimple, f ->
+                ["allchr.mergelist.txt", f.getBaseName() + '\n'] }
+            .set{ list_files_merge }
+        chrsqced
+            .map{ vSimple, f -> file(f) }
+            .set{ chrfiles }
+
+        MERGER_CHRS(list_files_merge, chrfiles.collect())
+        MERGER_CHRS.out
+            .flatten()
+            .filter{ fName -> ["pgen", "pvar", "psam"].contains(fName.getExtension()) }
+            .collect()
+            .set{ input_compute_pca }
+
+        // Run GWAS QC
+        GWASQC(MERGER_CHRS.out)
+        qc_h5_file = GWASQC.out.gwasqc_h5_file
+    }
 
     // ==================================================================================
     // DATA PREPARATION PHASE
     // ==================================================================================
-    PHENOS_FILE = GETPHENOS(params.covarfile)
-    ALLPHENOS = GETPHENOS.out.allphenos.readLines()
-    REMOVEOUTLIERS(GWASQC.out.gwasqc_h5_file, params.covarfile, ALLPHENOS)
-    COMPUTE_PCA(REMOVEOUTLIERS.out.flatten(), input_compute_pca)
+    MAKEANALYSISSETS(qc_h5_file, params.covarfile)
+    COMPUTE_PCA(MAKEANALYSISSETS.out.flatten(), input_compute_pca)
     MERGE_PCA(COMPUTE_PCA.out.eigenvec)
 
     // Branch based on analysis type

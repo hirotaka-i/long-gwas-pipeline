@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # Take the vcf file (genotyped or imputed)
 # Resource folder needed and files will be downloaded on-demand if not present
 # Process:
@@ -61,7 +62,7 @@ fi
 ######## start processing ###############################
 # Step 1: Filter PASS (&R2 if imputed) and add "chr" prefix if missing
 ## Different pipeline for imputed and genotyped (R2THRES>0....imputed)
-if [[ $R2THRES > 0 ]]
+if (( $(awk -v r2="$R2THRES" 'BEGIN {print (r2 > 0)}') ))
 then 
     bcftools view -f '.,PASS' \
                   -i "INFO/R2>${R2THRES}" ${VFILE} \
@@ -73,8 +74,13 @@ fi
 
 # Check if chromosomes need "chr" prefix and add if missing
 FIRST_CHR=$(bcftools view -H ${FILE}_filtered_temp.vcf.gz | head -1 | cut -f1)
+if [[ -z "$FIRST_CHR" ]]; then
+    echo "ERROR: No variants found in input VCF after filtering"
+    exit 1
+fi
 if [[ ! "$FIRST_CHR" =~ ^chr ]]; then
     echo "Adding 'chr' prefix to chromosome names..."
+    EXPECTED_CHR="chr${FIRST_CHR}"
     bcftools annotate --rename-chrs <(bcftools view -h ${FILE}_filtered_temp.vcf.gz | \
         grep "^##contig" | sed 's/.*ID=\([^,]*\).*/\1/' | \
         awk '{if ($1 !~ /^chr/ && $1 ~ /^[0-9XYM]/) print $1"\tchr"$1; else print $1"\t"$1}') \
@@ -82,6 +88,7 @@ if [[ ! "$FIRST_CHR" =~ ^chr ]]; then
     rm ${FILE}_filtered_temp.vcf.gz
 else
     echo "Chromosome names already have 'chr' prefix"
+    EXPECTED_CHR="${FIRST_CHR}"
     mv ${FILE}_filtered_temp.vcf.gz ${FILE}_filtered.vcf.gz
 fi
 
@@ -93,7 +100,7 @@ then
 else
     # Liftover using bcftools +liftover plugin
     # Note: bcftools +liftover requires both source and destination reference genomes
-    ASSEMBLY_FA=${RESOURCE_DIR}/Genome/${ASSEMBLY}.fa.gz
+    # ASSEMBLY_FA already set in reference checking section above
     
     bcftools +liftover ${FILE}_filtered.vcf.gz \
              --threads ${N} \
@@ -111,7 +118,7 @@ bcftools norm -m-both ${FILE}_hg38.vcf.gz \
           -Oz -o ${FILE}_split.vcf.gz --threads ${N}
 
 # Step 4: Convert to plink format (after liftover and split)
-if [[ $R2THRES > 0 ]]
+if (( $(awk -v r2="$R2THRES" 'BEGIN {print (r2 > 0)}') ))
 then
     plink2 --threads ${N} \
            --vcf ${FILE}_split.vcf.gz dosage=DS \
@@ -126,13 +133,21 @@ plink2 --threads ${N} \
        --pfile ${FILE}_split --make-pgen --fa $FA --normalize --sort-vars --out ${FILE}_split_hg38_normalized
 
 # select relevant snps with more than sigleton (For small cohorts, this process reduces a lot of variants)
-plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized --make-pgen --snps-only just-acgt --mac 2 --out ${FILE}_split_hg38_normalized_snps
+# Also filter to keep only the expected chromosome
+plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized --make-pgen --snps-only just-acgt --mac 2 --chr ${EXPECTED_CHR} --out ${FILE}_split_hg38_normalized_snps
 # align ref alt (This will return provisional variants sometime)
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps --make-pgen --ref-from-fa force --fa $FA --out ${FILE}_split_hg38_normalized_snps_temp_aligned
 # remove the "Provisional variants" because provisional variants prevents loading on plink2
-grep 'PR$' ${FILE}_split_hg38_normalized_snps_temp_aligned.pvar | cut -f3 > ${FILE}_split_hg38_normalized_snps_temp_aligned_provisional.txt
-# exclude provisional variants first
-plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps --make-pgen --exclude ${FILE}_split_hg38_normalized_snps_temp_aligned_provisional.txt --out ${FILE}_split_hg38_normalized_snps_noprov
+grep 'PR$' ${FILE}_split_hg38_normalized_snps_temp_aligned.pvar | cut -f3 > ${FILE}_split_hg38_normalized_snps_temp_aligned_provisional.txt || true
+# exclude provisional variants first (skip if no provisional variants found)
+if [[ -s ${FILE}_split_hg38_normalized_snps_temp_aligned_provisional.txt ]]; then
+    plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps --make-pgen --exclude ${FILE}_split_hg38_normalized_snps_temp_aligned_provisional.txt --out ${FILE}_split_hg38_normalized_snps_noprov
+else
+    # No provisional variants, just copy
+    cp ${FILE}_split_hg38_normalized_snps.pgen ${FILE}_split_hg38_normalized_snps_noprov.pgen
+    cp ${FILE}_split_hg38_normalized_snps.pvar ${FILE}_split_hg38_normalized_snps_noprov.pvar
+    cp ${FILE}_split_hg38_normalized_snps.psam ${FILE}_split_hg38_normalized_snps_noprov.psam
+fi
 # then align ref/alt independently
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_noprov --make-pgen --ref-from-fa force --fa $FA --out ${FILE}_split_hg38_normalized_snps_aligned
 # remame ID for standard chr:pos:ref:alt

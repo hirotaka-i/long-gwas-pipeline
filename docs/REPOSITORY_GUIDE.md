@@ -144,8 +144,7 @@ This is a **Nextflow-based bioinformatics pipeline** for performing **Genome-Wid
 │                                                         │
 │  ┌───────────────────────────────────────────────────┐ │
 │  │ dataprep.nf (7 processes)                         │ │
-│  │  - GETPHENOS      : Extract cohorts               │ │
-│  │  - REMOVEOUTLIERS : Filter samples                │ │
+│  │  - MAKEANALYSISSETS: Extract cohorts & filter      │ │
 │  │  - COMPUTE_PCA    : Principal components          │ │
 │  │  - MERGE_PCA      : Merge PCA with data           │ │
 │  │  - GALLOPCOX_INPUT: Prepare longitudinal/survival │ │
@@ -171,7 +170,7 @@ This is a **Nextflow-based bioinformatics pipeline** for performing **Genome-Wid
 ┌─────────────────────────────────────────────────────────┐
 │                 bin/ (Helper scripts)                   │
 │  - get_phenos.py      : Extract cohorts from covariates │
-│  - remove_outliers.py : Outlier & kinship filtering     │
+│  - make_analysis_sets.py: Extract cohorts & filter      │
 │  - addi_qc_pipeline.py: Ancestry & kinship QC           │
 │  - glm_phenocovar.py  : GLM phenotype preparation       │
 │  - gallop.py          : GALLOP wrapper                  │

@@ -22,14 +22,14 @@ process GWASGLM {
   script:
     def covariates = "${params.covariates}".replaceAll(/ /, ",")
     def m = []
-    def cohort = samplelist.getName()
-    m = cohort =~ /(.*)_analyzed.tsv/
-    cohort = m[0][1]
-    def outfile = "${cohort}_${fSimple}"
+    def study_arm = samplelist.getName()
+    m = study_arm =~ /(.*)_analyzed.tsv/
+    study_arm = m[0][1]
+    def outfile = "${study_arm}_${fSimple}"
 
     """
     set -x
-    KEY="${cohort}_${phenoname}"
+    KEY="${study_arm}_${phenoname}"
 
     glm_phenocovar.py \
         --pheno_covar ${samplelist} \

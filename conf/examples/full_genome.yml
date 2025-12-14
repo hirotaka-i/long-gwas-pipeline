@@ -1,0 +1,39 @@
+# Example parameters for full genome analysis
+# Usage: nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file conf/examples/full_genome.yml
+
+# Input files - REPLACE WITH YOUR DATA
+input: "/path/to/your/genotypes/*.vcf.gz"
+covarfile: "/path/to/your/covariates.tsv"
+phenofile: "/path/to/your/phenotype.tsv"
+
+# Variable names in covariate/phenotype files
+pheno_name: "y"  # Can be comma-separated for multiple phenotypes: "y1,y2,y3"
+covariates: "SEX age_at_baseline PC1 PC2 PC3 PC4 PC5"
+study_arm_col: "study_arm"
+time_col: "study_days"
+
+# Analysis type - enable one or more
+linear_flag: true
+longitudinal_flag: false
+survival_flag: false
+
+# Processing options
+chunk_flag: true
+chunk_size: 30000  # Number of variants per chunk
+
+# Quality control parameters
+r2thres: 0.8  # Imputation quality filter (set to -9 to disable)
+minor_allele_freq: "0.01"
+minor_allele_ct: "20"
+kinship: "0.177"
+
+# Genetic parameters
+ancestry: "EUR"  # EUR, AFR, EAS, SAS, AMR
+assembly: "hg38"  # hg19 or hg38
+skip_pop_split: false
+
+# Dataset identifier (used for caching)
+dataset: "MY_GWAS"
+
+# Visualization
+mh_plot: true

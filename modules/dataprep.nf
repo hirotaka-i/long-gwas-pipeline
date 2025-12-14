@@ -1,48 +1,15 @@
 /*
  * Consolidated Data Preparation Module
  * Contains all data preparation processes:
- * - GETPHENOS: Extract unique cohorts from covariates
- * - REMOVEOUTLIERS: Remove outliers and kinship-related samples
- * - COMPUTE_PCA: Compute principal components for each cohort
+ * - MAKEANALYSISSETS: Extract study arms and filter samples (outliers, kinship)
+ * - COMPUTE_PCA: Compute principal components for each study arm
  * - MERGE_PCA: Merge PCA results with sample data
  * - GALLOPCOX_INPUT: Prepare input chunks for GALLOP/CPH analysis
  * - RAWFILE_EXPORT: Export raw files for longitudinal/survival analysis
  * - EXPORT_PLINK: Export PLINK format for GLM analysis
  */
 
-process GETPHENOS {
-  scratch true
-  label 'small'
-  
-  input:
-    path covarfile, stageAs: 'covariates.tsv'
-  output:
-    path "phenos_list.txt", emit: allphenos
-  
-  script:
-    """
-    echo "=== GETPHENOS Debug Info ===" >&2
-    echo "PWD: \$PWD" >&2
-    echo "Files in current directory:" >&2
-    ls -lah >&2
-    echo "Covariate file exists: \$(test -f covariates.tsv && echo 'YES' || echo 'NO')" >&2
-    echo "Covariate file size: \$(wc -l covariates.tsv 2>&1)" >&2
-    echo "Python version: \$(python --version 2>&1)" >&2
-    echo "get_phenos.py location: \$(which get_phenos.py 2>&1)" >&2
-    echo "Running: get_phenos.py covariates.tsv ${params.study_col}" >&2
-    echo "===========================" >&2
-    
-    set -x
-    get_phenos.py covariates.tsv "${params.study_col}"
-    set +x
-    
-    echo "=== GETPHENOS Completed ===" >&2
-    echo "Output file created: \$(test -f phenos_list.txt && echo 'YES' || echo 'NO')" >&2
-    test -f phenos_list.txt && echo "Output contents:" >&2 && cat phenos_list.txt >&2
-    """
-}
-
-process REMOVEOUTLIERS {
+process MAKEANALYSISSETS {
   scratch true
   label 'medium'
   storeDir "${STORE_DIR}/${params.dataset}/p3_COVARIATES_QC"
@@ -50,13 +17,12 @@ process REMOVEOUTLIERS {
   input:
     path samplelist
     path covarfile, stageAs: 'covariates.tsv'
-    each cohort
   output:
-    path "${params.ancestry}_${cohort}_filtered.tsv"
+    path "${params.ancestry}_*_filtered.tsv"
 
   script:
     """
-    remove_outliers.py "${samplelist}" covariates.tsv "${cohort}" "${params.ancestry}" "${params.study_col}" "${params.kinship}"
+    make_analysis_sets.py "${samplelist}" covariates.tsv "${params.ancestry}" "${params.study_arm_col}" "${params.kinship}"
     """
 }
 
@@ -71,27 +37,27 @@ process COMPUTE_PCA {
     path "*"
     
   output:
-    tuple path(samplelist), path("${cohort_prefix}.pca.eigenvec"), emit: eigenvec
+    tuple path(samplelist), path("${study_arm_prefix}.pca.eigenvec"), emit: eigenvec
 
   script:
     def m = []
-    def cohort = ""
-    cohort = samplelist.getName()
-    m = cohort =~ /(.*)_filtered.tsv/
-    cohort = m[0][1]
-    cohort_prefix = "${cohort}"
+    def study_arm = ""
+    study_arm = samplelist.getName()
+    m = study_arm =~ /(.*)_filtered.tsv/
+    study_arm = m[0][1]
+    study_arm_prefix = "${study_arm}"
     
     """
     plink2 \
           --indep-pairwise 50 .2 \
           --maf ${params.minor_allele_freq} \
           --pfile "allchr_${params.dataset}_p2in" \
-          --out ${cohort}.ld
+          --out ${study_arm}.ld
 
     plink2 \
           --keep ${samplelist} \
-          --out ${cohort}.pca \
-          --extract ${cohort}.ld.prune.in \
+          --out ${study_arm}.pca \
+          --extract ${study_arm}.ld.prune.in \
           --pca 10 \
           --threads ${task.cpus} \
           --memory ${task.memory.toMega()} \
@@ -104,7 +70,7 @@ process MERGE_PCA {
   label 'small'
   
   input:
-    tuple path(samplelist), path(cohort_pca)
+    tuple path(samplelist), path(study_arm_pca)
   
   output:
     path "${params.ancestry}_*_filtered.pca.tsv"
@@ -118,16 +84,16 @@ process MERGE_PCA {
      
      print(os.listdir())
      sample_fn = "${samplelist.getName()}"
-     cohort = sample_fn[:-(len('_filtered.tsv'))]
-     pc_fn = cohort + '.pca.eigenvec'
+     study_arm = sample_fn[:-(len('_filtered.tsv'))]
+     pc_fn = study_arm + '.pca.eigenvec'
 
-     print(pc_fn, cohort)
+     print(pc_fn, study_arm)
      pc_df = pd.read_csv(pc_fn, sep="\\t")
      samples_df = pd.read_csv(sample_fn, sep="\\t")
      pc_df.rename(columns={"#IID": "IID"}, inplace=True)
      samples_df = samples_df.merge(pc_df, on="IID")
      
-     samples_df.to_csv(cohort + '_filtered.pca.tsv', sep="\\t", index=False)
+     samples_df.to_csv(study_arm + '_filtered.pca.tsv', sep="\\t", index=False)
      time.sleep(5)
      """
 }
@@ -193,12 +159,12 @@ process RAWFILE_EXPORT {
     params.longitudinal_flag || params.survival_flag
 
   script:
-    def cohort = ""
-    cohort = samplelist.getName()
-    m = cohort =~ /(.*)_filtered.pca.tsv/
-    cohort = m[0][1]
+    def study_arm = ""
+    study_arm = samplelist.getName()
+    m = study_arm =~ /(.*)_filtered.pca.tsv/
+    study_arm = m[0][1]
 
-    def outfile = "${cohort}_${fSimple}"
+    def outfile = "${study_arm}_${fSimple}"
 
     """
     set -x
@@ -237,9 +203,9 @@ process EXPORT_PLINK {
 
   script:
     def m = []
-    def cohort = ""
-    cohort = samplelist.getName()
-    m = cohort =~ /(.*)_filtered.pca.tsv/
+    def study_arm = ""
+    study_arm = samplelist.getName()
+    m = study_arm =~ /(.*)_filtered.pca.tsv/
     outfile = "${m[0][1]}"
 
     def pheno_name = "y"

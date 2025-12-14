@@ -73,7 +73,7 @@ nextflow run main.nf -profile standard --input "path/to/*.vcf.gz" --dataset "MY_
 nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file myparams.yml
 
 # Run specific version/tag
-nextflow run hirotaka-i/long-gwas-pipeline -r v2.0 -profile standard -params-file myparams.yml
+nextflow run hirotaka-i/long-gwas-pipeline -r v0.1.0 -profile standard -params-file conf/examples/test_data.yml
 
 # Latest release
 nextflow run hirotaka-i/long-gwas-pipeline -r latest -profile standard -params-file myparams.yml

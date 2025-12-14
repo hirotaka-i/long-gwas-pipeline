@@ -108,18 +108,8 @@ RUN wget -q https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VE
     rm bcftools.tar.bz2
 
 # Download liftover plugin from freeseek/score repository
-# Try GitHub first, fallback to local backup if unavailable
 RUN wget -q https://raw.githubusercontent.com/freeseek/score/a9ffa435913101439974fce7c4812235b61e6df5/liftover.c \
-    -O /tmp/bcftools-${BCFTOOLS_VERSION}/plugins/liftover.c || \
-    echo "Warning: Could not download liftover.c from GitHub, will use local backup"
-
-# Copy local backup if download failed
-COPY docker/build-artifacts/liftover.c /tmp/liftover_backup.c
-RUN if [ ! -s /tmp/bcftools-${BCFTOOLS_VERSION}/plugins/liftover.c ]; then \
-        echo "Using local backup of liftover.c"; \
-        cp /tmp/liftover_backup.c /tmp/bcftools-${BCFTOOLS_VERSION}/plugins/liftover.c; \
-    fi && \
-    rm /tmp/liftover_backup.c
+    -O /tmp/bcftools-${BCFTOOLS_VERSION}/plugins/liftover.c
 
 # Compile and install BCFtools with liftover plugin
 RUN cd /tmp/bcftools-${BCFTOOLS_VERSION} && \

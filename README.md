@@ -291,3 +291,18 @@ If you use this pipeline, please cite:
 For issues and questions:
 - 🐛 **Bug reports**: [GitHub Issues](https://github.com/hirotaka-i/long-gwas-pipeline/issues)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/hirotaka-i/long-gwas-pipeline/discussions)
+
+
+
+## Appendix for Docker Image Maintenance
+Docker images are built automatically via GitHub Actions. See [.github/DOCKER_BUILDS.md](.github/DOCKER_BUILDS.md) for details.
+
+Local Docker image maintenance instructions are below.
+# Weekly maintenance - safe - keeps tagged images, removes build cache
+docker system prune -f
+
+# After major builds - more aggressive - removes all unused images
+docker builder prune -a -f
+
+# Nuclear option - rarely - use with caution
+docker system prune -a -f --volumes  # Only when you know what you're doing

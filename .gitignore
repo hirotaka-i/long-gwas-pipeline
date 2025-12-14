@@ -158,3 +158,4 @@ test_*/docker/build-artifacts/
 report-*.html 
 timeline-*.html 
 trace-*.txt
+.nextflow.log*

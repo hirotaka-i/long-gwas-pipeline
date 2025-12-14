@@ -32,30 +32,30 @@ RESOURCE_DIR=${RESOURCE_DIR:-./References}
 FA=${RESOURCE_DIR}/Genome/hg38.fa.gz
 LIFTOVERCHAIN=${RESOURCE_DIR}/liftOver/${ASSEMBLY}ToHg38.over.chain.gz
 
-# Ensure reference genomes are available
-# This downloads references on-demand if they don't exist
+# Verify reference genomes are available (should be pre-downloaded by DOWNLOAD_REFERENCES process)
 if [ ! -f "$FA" ] || [ ! -f "${FA}.fai" ]; then
-    echo "Reference genome hg38 not found. Downloading..."
-    if command -v bash &> /dev/null && [ -f "$(dirname "$0")/download_references.sh" ]; then
-        bash "$(dirname "$0")/download_references.sh" "$ASSEMBLY" "$RESOURCE_DIR"
-    else
-        echo "ERROR: Reference genomes not available and cannot auto-download."
-        echo "Please run: bin/download_references.sh $ASSEMBLY"
-        exit 1
-    fi
+    echo "ERROR: Reference genome hg38 not found at: $FA"
+    echo "Expected files:"
+    echo "  - $FA"
+    echo "  - ${FA}.fai"
+    echo ""
+    echo "References should be downloaded by the DOWNLOAD_REFERENCES process before this step."
+    echo "If running manually, execute: bin/download_references.sh $ASSEMBLY"
+    exit 1
 fi
 
 if [ "$ASSEMBLY" != "hg38" ]; then
     ASSEMBLY_FA=${RESOURCE_DIR}/Genome/${ASSEMBLY}.fa.gz
     if [ ! -f "$ASSEMBLY_FA" ] || [ ! -f "${ASSEMBLY_FA}.fai" ] || [ ! -f "$LIFTOVERCHAIN" ]; then
-        echo "Source assembly ${ASSEMBLY} references not found. Downloading..."
-        if command -v bash &> /dev/null && [ -f "$(dirname "$0")/download_references.sh" ]; then
-            bash "$(dirname "$0")/download_references.sh" "$ASSEMBLY" "$RESOURCE_DIR"
-        else
-            echo "ERROR: Reference genomes not available and cannot auto-download."
-            echo "Please run: bin/download_references.sh $ASSEMBLY"
-            exit 1
-        fi
+        echo "ERROR: Source assembly ${ASSEMBLY} references not found"
+        echo "Expected files:"
+        echo "  - $ASSEMBLY_FA"
+        echo "  - ${ASSEMBLY_FA}.fai"
+        echo "  - $LIFTOVERCHAIN"
+        echo ""
+        echo "References should be downloaded by the DOWNLOAD_REFERENCES process before this step."
+        echo "If running manually, execute: bin/download_references.sh $ASSEMBLY"
+        exit 1
     fi
 fi
 

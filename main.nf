@@ -43,7 +43,7 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
 /* 
  * Import consolidated modules
  */
-include { GENETICQC; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
+include { CHECK_REFERENCES; GENETICQC; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
 include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; GALLOPCOX_INPUT; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
@@ -76,6 +76,11 @@ Channel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 workflow {
+    // ==================================================================================
+    // PROCESS 0: CHECK REFERENCE GENOMES (runs once)
+    // ==================================================================================
+    CHECK_REFERENCES()
+    
     // ==================================================================================
     // QUALITY CONTROL (QC) PHASE
     // ==================================================================================
@@ -148,9 +153,12 @@ workflow {
         .collate(4, false)
         .map{ fSimple1, fOrig, fSimple2, fChunk -> 
             tuple(fSimple1, file(fOrig), fChunk) }
+        .combine(CHECK_REFERENCES.out.references_flag)
+        .map{ vSimple, fOrig, fChunk, refFlag -> 
+            tuple(vSimple, fOrig, fChunk) }
         .set{ input_p1_run_ch }
 
-    // Run genetic QC
+    // Run genetic QC (depends on CHECK_REFERENCES completing)
     GENETICQC(input_p1_run_ch)
 
     GENETICQC.out.snpchunks_names

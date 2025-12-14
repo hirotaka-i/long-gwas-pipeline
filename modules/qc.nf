@@ -1,11 +1,82 @@
 /* 
  * Consolidated QC Module
  * Contains all quality control processes:
+ * - CHECK_REFERENCES: Verify reference genomes exist (process 0 - runs once)
  * - GENETICQC: Genotype preprocessing and filtering
  * - MERGER_CHUNKS: Merge chromosome chunks
  * - MERGER_CHRS: Merge all chromosomes
  * - GWASQC: GWAS-level QC (ancestry, kinship, outliers)
  */
+
+/* Process 0 - Check Reference Genomes (runs once before all other processes) */
+process CHECK_REFERENCES {
+  label 'small'
+  cache 'lenient'
+  
+  output:
+    path "references_ready.txt", emit: references_flag
+  
+  script:
+  """
+  echo "Checking reference genomes for assembly: ${params.assembly}" > references_ready.txt
+  echo "Reference directory: ${RESOURCE_DIR}" >> references_ready.txt
+  echo "" >> references_ready.txt
+  
+  # Verify critical files exist
+  if [ ! -f "${RESOURCE_DIR}/Genome/hg38.fa.gz" ]; then
+    echo "ERROR: hg38 reference genome not found at: ${RESOURCE_DIR}/Genome/hg38.fa.gz" | tee -a references_ready.txt
+    echo "" | tee -a references_ready.txt
+    echo "Please download references before running the pipeline:" | tee -a references_ready.txt
+    echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
+    exit 1
+  fi
+  
+  if [ ! -f "${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" ]; then
+    echo "ERROR: hg38 reference index not found at: ${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" | tee -a references_ready.txt
+    echo "" | tee -a references_ready.txt
+    echo "Please download references before running the pipeline:" | tee -a references_ready.txt
+    echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
+    exit 1
+  fi
+  
+  echo "✓ hg38.fa.gz found" >> references_ready.txt
+  echo "✓ hg38.fa.gz.fai found" >> references_ready.txt
+  
+  if [ "${params.assembly}" != "hg38" ]; then
+    if [ ! -f "${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" ]; then
+      echo "ERROR: ${params.assembly} reference genome not found at: ${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" | tee -a references_ready.txt
+      echo "" | tee -a references_ready.txt
+      echo "Please download references before running the pipeline:" | tee -a references_ready.txt
+      echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
+      exit 1
+    fi
+    
+    if [ ! -f "${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" ]; then
+      echo "ERROR: ${params.assembly} reference index not found at: ${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" | tee -a references_ready.txt
+      echo "" | tee -a references_ready.txt
+      echo "Please download references before running the pipeline:" | tee -a references_ready.txt
+      echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
+      exit 1
+    fi
+    
+    if [ ! -f "${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" ]; then
+      echo "ERROR: Liftover chain file not found at: ${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" | tee -a references_ready.txt
+      echo "" | tee -a references_ready.txt
+      echo "Please download references before running the pipeline:" | tee -a references_ready.txt
+      echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
+      exit 1
+    fi
+    
+    echo "✓ ${params.assembly}.fa.gz found" >> references_ready.txt
+    echo "✓ ${params.assembly}.fa.gz.fai found" >> references_ready.txt
+    echo "✓ ${params.assembly}ToHg38.over.chain.gz found" >> references_ready.txt
+  fi
+  
+  echo "" >> references_ready.txt
+  echo "All required reference files verified successfully!" >> references_ready.txt
+  date >> references_ready.txt
+  """
+}
 
 /* Process 1 Run - Variant Standardization */
 process GENETICQC {

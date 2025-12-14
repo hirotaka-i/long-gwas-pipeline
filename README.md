@@ -70,7 +70,7 @@ Nextflow automatically mounts your project's `bin/` and `modules/` directory int
 - `modules/`: Nextflow modules for each pipeline stage
 - `conf/`: Configuration profiles
 - `example/`: Example input genetics and clinical data for testing.
-- `References/`: Reference genome and chain files (auto-mounted into containers)
+- `References/`: Reference genome and chain files
 
 ```
 <reference_dir>/ # Directory specified by `reference_dir` parameter. Default: `./References/`
@@ -91,10 +91,19 @@ These files are required for variant liftover and alignment during QC steps. Whe
 ## Running the Pipeline
 We use profiles to configure different execution environments (local, cloud, HPC). See [Configuration Guide](docs/config.md) for details. Paramaters can be set via YAML files (see `conf/examples/`).
 
+#### Set Environment Variables
 ```
 export STORE_ROOT='path/to/store_root'    # Default $PWD. Can be GCS bucket for cloud runs
 export PROJECT_NAME='my_gwas_test'        # Unique project identifier
 ```
+
+#### Preparation of `Reference` folder. 
+This is optional, if we have the folders already, skip this step and specify the path via `reference_dir` parameter)
+```bash
+# hg19 example
+bin/download_references.sh hg19 References
+```
+
 
 ### Local Execution (from cloned repository)
 
@@ -120,7 +129,10 @@ mkdir -p ./Docker
 cd ./Docker
 singularity build long-gwas-pipeline.sif docker://ghcr.io/hirotaka-i/long-gwas-pipeline:0.1.0
 cd ..
+# Submit the slurm job from the main directory
 nextflow run main.nf -profile biowulf -params-file conf/examples/test_data.yml
+# or local
+nextflow run main.nf -profile biowulflocal -params-file conf/examples/test_data.yml
 ```
 
 ### Verily Workbench / Google Cloud Batch

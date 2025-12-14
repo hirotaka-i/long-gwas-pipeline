@@ -16,7 +16,7 @@ time_col: "study_days"
 # Analysis type
 linear_flag: true
 longitudinal_flag: false
-survival_flag: false
+survival_flag: true
 
 # Processing options
 chunk_flag: true

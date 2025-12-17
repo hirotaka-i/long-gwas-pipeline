@@ -82,53 +82,64 @@ process CHECK_REFERENCES {
 process GENETICQC {
   scratch true
   label 'medium'
+  errorStrategy 'ignore'
 
   input:
-    tuple val(vSimple), path(fOrig), path(fChunk)
+    tuple val(fileTag), path(fChunk)
   output:
-    tuple file("${output}.bed"), file("${output}.bim"), file("${output}.fam"), emit: snpchunks_merge
-    tuple val(vSimple), val("${output}"), emit: snpchunks_names
+    tuple file("${chunkId}.bed"), file("${chunkId}.bim"), file("${chunkId}.fam"), optional: true, emit: snpchunks_merge
+    tuple val(fileTag), val(chunkId), optional: true, emit: snpchunks_names
+    tuple val(fileTag), val(chunkId), path("${chunkId}.status.txt"), emit: chunk_status
 
   script:
-  def vPart = ""
-  def prefix = ""
-
-  vPart = fChunk.getBaseName()
-
-  def mPart = vPart =~ /(.*)\.([0-9]+)\.(.*)$/
-  vPart = mPart[0][2]
-
-  prefix = "${vSimple}.${vPart}"
-  output = "${prefix}_p1out"
-  ext = fChunk.getExtension()
+  // Use chunk left of vcf as prefix  chr22.1.vcf.gz -> chr20.1.vcf
+  def chunkBase = fChunk.getName()
+  def prefix = chunkBase.replaceFirst(/\.vcf(\.gz)?$/, '')
+  chunkId = "${prefix}_p1out"
 
   """
-  echo "Processing - ${fChunk}"
+  set +e  # Don't exit on error
+  
+  echo "Processing chunk: ${fChunk}"
+  echo "Output prefix: ${prefix}"
   echo "Assigned cpus: ${task.cpus}"
   echo "Assigned memory: ${task.memory}"
   
-  set +x
-  if [[ ${vPart} == 1 ]]; then
-    cp $fChunk tmp_input.${ext}
-  else
-    bcftools view -h $fOrig | gzip > tmp_input.${ext}
-    cat $fChunk >> tmp_input.${ext}
-  fi
+  START_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
 
   process1.sh \
     ${task.cpus} \
-    tmp_input.${ext} \
+    ${fChunk} \
     ${params.r2thres} \
     ${params.assembly} \
     ${prefix}
+  
+  EXIT_CODE=\$?
+  END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
+  
+  # Check if output files were created
+  if [ -f "${chunkId}.bed" ] && [ -f "${chunkId}.bim" ] && [ -f "${chunkId}.fam" ]; then
+    VARIANT_COUNT=\$(wc -l < ${chunkId}.bim)
+    STATUS="SUCCESS"
+    echo "✓ Successfully processed chunk with \${VARIANT_COUNT} variants"
+  else
+    VARIANT_COUNT=0
+    STATUS="FAILED"
+    echo "⚠ Warning: Chunk produced no variants after filtering (likely too small or low quality)" >&2
+  fi
+  
+  # Write status as tab-separated single line
+  echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\t\${STATUS}\t\${VARIANT_COUNT}" > ${chunkId}.status.txt
+  
+  exit 0  # Always exit successfully to allow workflow continuation
   """
 }
 
 process MERGER_CHUNKS {
   scratch true
-  storeDir "${STORE_DIR}/${params.dataset}/p1_run_cache"
+  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p1_run_cache"
   publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/MERGER_CHUNKS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.log"
-  label 'small'
+  label 'large_mem'
 
   input:
     file mergelist
@@ -168,7 +179,7 @@ process MERGER_CHUNKS {
 
 process MERGER_CHRS {
   scratch true
-  storeDir "${STORE_DIR}/${params.dataset}/p2_merged_cache"
+  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p2_merged_cache"
   publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/MERGER_CHRS_LOGS_${params.datetime}/logs", mode: 'copy', overwrite: true, pattern: "*.log"
   label 'large_mem'
 
@@ -194,7 +205,7 @@ process MERGER_CHRS {
 /* LD Prune per chromosome (for skip population splitting mode) */
 process LD_PRUNE_CHR {
   scratch true
-  storeDir "${STORE_DIR}/${params.dataset}/p2_ldprune_cache"
+  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p2_ldprune_cache"
   label 'medium'
 
   input:
@@ -226,7 +237,7 @@ process LD_PRUNE_CHR {
 
 /* Simple QC without ancestry inference (for skip population splitting mode) */
 process SIMPLE_QC {
-  storeDir "${STORE_DIR}/${params.dataset}/p2_qc_pipeline_cache"
+  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p2_qc_pipeline_cache"
   publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/SIMPLEQC_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.txt"
   publishDir "${OUTPUT_DIR}/${params.dataset}/PLOTS/SIMPLEQC_PLOTS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.png"
   label 'large_mem'
@@ -251,7 +262,7 @@ process SIMPLE_QC {
 }
 
 process GWASQC {
-  storeDir "${STORE_DIR}/${params.dataset}/p2_qc_pipeline_cache"
+  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p2_qc_pipeline_cache"
   publishDir "${OUTPUT_DIR}/${params.dataset}/PLOTS/GWASQC_PLOTS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
   label 'large_mem'
   

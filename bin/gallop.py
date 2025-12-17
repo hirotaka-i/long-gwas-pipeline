@@ -67,7 +67,7 @@ def load_plink_raw(fn):
   return pd.concat([cds, ds], axis=1)
 
 
-def preprocess(dp, dc, ds, covariates=None, 
+def preprocess(dp, dc, ds, covariates=None, covar_categorical=None,
                standardize=True,  keep=None, time_name=None,
                pheno_name=None, MAF=None, rawfile=False, impute=None):
 
@@ -136,12 +136,34 @@ def preprocess(dp, dc, ds, covariates=None,
   #              np.divide(df[time_name], 365.25),
   #              np.mean(np.divide(df[time_name].dropna(), 365.25)))
 
+  # Separate quantitative and categorical covariates
+  quant_covariates = [c for c in covariates if c not in (covar_categorical or [])]
+  cat_covariates = covar_categorical or []
+  
+  # One-hot encode categorical covariates
+  if cat_covariates:
+    sys.stdout.write(f"One-hot encoding categorical covariates: {', '.join(cat_covariates)}\n")
+    df_encoded = pd.get_dummies(df[cat_covariates], drop_first=True, dtype=float)
+    # Update covariates list to include encoded columns
+    encoded_cols = df_encoded.columns.tolist()
+    sys.stdout.write(f"Created {len(encoded_cols)} dummy variables: {', '.join(encoded_cols)}\n")
+  else:
+    df_encoded = pd.DataFrame(index=df.index)
+    encoded_cols = []
+  
   # scipy scale uses a biased estimator of variance with df=0
   # use an unbiased estimator of variance (n-1)
-  data = pd.DataFrame(
-          np.divide(scale(df[covariates], with_std=False), 
-                          np.matrix(np.sqrt(np.var(df[covariates], ddof=1)))),
-          index=df.index, columns=df[covariates].columns)
+  if quant_covariates:
+    data = pd.DataFrame(
+            np.divide(scale(df[quant_covariates], with_std=False), 
+                            np.matrix(np.sqrt(np.var(df[quant_covariates], ddof=1)))),
+            index=df.index, columns=df[quant_covariates].columns)
+  else:
+    data = pd.DataFrame(index=df.index)
+  
+  # Add encoded categorical variables (already 0/1, don't standardize)
+  if not df_encoded.empty:
+    data = pd.concat([data, df_encoded], axis=1)
   
   data['time'] = df.time
   if pheno_name is not None:
@@ -442,6 +464,8 @@ https://www.nature.com/articles/s41598-018-24578-7
   parser.add_argument('--pheno-name-file', help='File outlining the phenotypes (one on each line)') 
   parser.add_argument('--covar-name', help='Covariates to include in the model ex: "SEX PC1 PC2"',
                       required=True, nargs='+')
+  parser.add_argument('--covar-cat-name', help='Categorical covariates to one-hot encode ex: "site specimen"',
+                      nargs='+', default=[])
   parser.add_argument('--time-name', help='Column name of time variable in phenotype; required for GALLOP analysis',
                       default='study_days')
   parser.add_argument('--covar-variance-standardize', 
@@ -482,7 +506,8 @@ https://www.nature.com/articles/s41598-018-24578-7
   else:
     pheno_name = [args.pheno_name]
 
-  data, ds, freq = preprocess(dp, dc, ds, args.covar_name, args.covar_variance_standardize, args.keep,
+  data, ds, freq = preprocess(dp, dc, ds, args.covar_name, args.covar_cat_name,
+                                      args.covar_variance_standardize, args.keep,
                                       args.time_name, pheno_name, args.maf, rawfile=rawfile, impute='mean')
 
   if args.gallop or (not args.gallop and not args.lme):
@@ -497,7 +522,9 @@ https://www.nature.com/articles/s41598-018-24578-7
           pass
         continue
 
-      XY = data[['id', 'time', pheno] + args.covar_name].copy()
+      # Get all covariate columns (quantitative + encoded categorical)
+      all_covars = [c for c in data.columns if c not in ['id', 'time', pheno]]
+      XY = data[['id', 'time', pheno] + all_covars].copy()
       XY.rename(columns={pheno: 'y'}, inplace=True)
       base_formula = args.model if args.model else f'y ~ {" + ".join(args.covar_name)} + time' 
       sys.stdout.write('Running GALLOP algorithm\n')

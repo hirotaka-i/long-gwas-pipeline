@@ -187,6 +187,13 @@ RUN micromamba run -n base pip install --force-reinstall --no-cache-dir --no-dep
 # Installed last as a separate layer for easy cache reuse
 RUN micromamba run -n base pip install --no-cache-dir tables
 
+# ============================================
+# GALLOP Python dependencies - Added at end for easy debugging
+# Required for bin/gallop.py longitudinal mixed model analysis
+# ============================================
+RUN micromamba run -n base pip install --no-cache-dir \
+    scikit-learn==1.3.2
+
 # NOTE: bin/ scripts are NOT copied into the Docker image
 # Nextflow automatically mounts the local bin/ directory to /workspace/bin/ inside containers
 # This allows you to modify scripts without rebuilding the Docker image

@@ -32,6 +32,7 @@ log.info """\
  analysis                                 : ${MODEL}
  project directory                        : ${params.project_dir}
  dataset                                  : ${params.dataset}
+ genetic cache key                        : ${params.genetic_cache_key}
  """
 
 /*
@@ -86,84 +87,35 @@ workflow {
     // ==================================================================================
     input_check_ch
         .join(cache, remainder: true)
-        .filter{ fSimple, fOrig, fCache -> fCache == null }
-        .map{ fSimple, fOrig, fCache -> tuple(fSimple, fOrig) }
+        .filter{ fileTag, fOrig, fCache -> fCache == null }
+        .map{ fileTag, fOrig, fCache -> tuple(fileTag, fOrig) }
         .set{ chrvcf }
 
+    // Efficient chunking: tag chunks by original input filename
+    // splitText preserves tuple elements before the file, so we need fileTag first
     chrvcf
-        .count()
-        .map{ val -> (1..val) }
-        .flatten()
-        .set{ input_idx_list }
-
-    input_idx_list
-        .merge(chrvcf)
-        .branch {
-            chunk_tasks_1: it[0] <= 5 
-                            return it
-            chunk_tasks_2: it[0] < 10 && it[0] > 5 
-                            return it
-            chunk_tasks_3: it[0] < 14 && it[0] >= 10 
-                            return it
-            chunk_tasks_4: it[0] < 18 && it[0] >= 14 
-                            return it
-            chunk_tasks_5: true
-        }.set{ input_p1 }
-
-    input_p1.chunk_tasks_1
-        .map{ fIdx, fSimple, fOrig -> fOrig }
-        .splitText(by: params.chunk_size, file: true, compress: true)
-        .map{ fn -> tuple(fn.getSimpleName(), fn) }
-        .set{ input_chunk_ch_1 }
-
-    input_p1.chunk_tasks_2
-          .map{ fIdx, fSimple, fOrig -> fOrig }
-          .splitText(by: params.chunk_size, file: true, compress: true)
-          .map{ fn -> tuple(fn.getSimpleName(), fn) }
-          .set{ input_chunk_ch_2 }
-
-    input_p1.chunk_tasks_3
-          .map{ fIdx, fSimple, fOrig -> fOrig }
-          .splitText(by: params.chunk_size, file: true, compress: true)
-          .map{ fn -> tuple(fn.getSimpleName(), fn) }
-          .set{ input_chunk_ch_3 }
-
-    input_p1.chunk_tasks_4
-          .map{ fIdx, fSimple, fOrig -> fOrig }
-          .splitText(by: params.chunk_size, file: true, compress: true)
-          .map{ fn -> tuple(fn.getSimpleName(), fn) }
-          .set{ input_chunk_ch_4 }
-
-    input_p1.chunk_tasks_5
-          .map{ fIdx, fSimple, fOrig -> fOrig }
-          .splitText(by: params.chunk_size, file: true, compress: true)
-          .map{ fn -> tuple(fn.getSimpleName(), fn) }
-          .set{ input_chunk_ch_5 }
-
-    input_chunk_ch_1
-        .mix(input_chunk_ch_2, 
-             input_chunk_ch_3,
-             input_chunk_ch_4,
-             input_chunk_ch_5)
-        .set{ input_chunks_ch }
-    
-    chrvcf
-        .cross(input_chunks_ch)
-        .flatten()
-        .collate(4, false)
-        .map{ fSimple1, fOrig, fSimple2, fChunk -> 
-            tuple(fSimple1, file(fOrig), fChunk) }
-        .combine(CHECK_REFERENCES.out.references_flag)
-        .map{ vSimple, fOrig, fChunk, refFlag -> 
-            tuple(vSimple, fOrig, fChunk) }
-        .set{ input_p1_run_ch }
+    .map{ fileTag, fOrig -> fOrig }
+    .splitText(by: params.chunk_size, file: true, compress: true, keepHeader: true)
+    .map{ fChunk -> tuple(fChunk.getSimpleName(), fChunk) }
+    // fChunk = chr20.1.vcf.gz, 
+    .combine(CHECK_REFERENCES.out.references_flag)
+    .map{ fileTag, fChunk, references_flag -> tuple(fileTag, fChunk) }
+    .set{ input_p1_run_ch }
 
     // Run genetic QC (depends on CHECK_REFERENCES completing)
     GENETICQC(input_p1_run_ch)
+    
+    // Collect chunk processing status for tracking (tab-separated table format)
+    GENETICQC.out.chunk_status
+        .map{ fileTag, chunkId, statusFile -> statusFile.text }
+        .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
+                     storeDir: "${OUTPUT_DIR}/${params.dataset}/LOGS/GENETICQC_STATUS/",
+                     seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
+                     newLine: false)
 
     GENETICQC.out.snpchunks_names
         .collectFile(newLine: true) 
-                        { vSimple, prefix -> ["${vSimple}.mergelist.txt", prefix] }
+                        { fileTag, chunkId -> ["${fileTag}.mergelist.txt", chunkId] }
         .set{ chunknames }
 
     // Merge chunks
@@ -189,15 +141,14 @@ workflow {
         // For GWAS: use unpruned chromosome-level data
         chrsqced
             .groupTuple(by: 0)
-            .flatten()
-            .collate(5)
             .set{ gallop_plink_input }
 
         chrsqced
             .groupTuple(by: 0)
-            .flatten()
-            .filter(~/.*pvar/)
-            .map{ it -> tuple(it.getSimpleName(), it) }
+            .map{ chrName, files -> 
+                def pvarFile = files.find{ it.name.endsWith('.pvar') }
+                tuple(chrName, pvarFile)
+            }
             .set{ gallopcph_chunks }
 
         // For QC/PCA: merge pruned chromosomes
@@ -226,17 +177,16 @@ workflow {
         // Prepare channels for downstream analysis
         chrsqced
             .groupTuple(by: 0)
-            .flatten()
-            .collate(5)
             .set{ gallop_plink_input }
 
         chrsqced
             .groupTuple(by: 0)
-            .flatten()
-            .filter(~/.*pvar/)
-            .map{ it -> tuple(it.getSimpleName(), it) }
+            .map{ chrName, files -> 
+                def pvarFile = files.find{ it.name.endsWith('.pvar') }
+                tuple(chrName, pvarFile)
+            }
             .set{ gallopcph_chunks }
-11
+
         // Merge all chromosomes
         chrsqced
             .collectFile() { vSimple, f ->
@@ -262,18 +212,20 @@ workflow {
     // DATA PREPARATION PHASE
     // ==================================================================================
     MAKEANALYSISSETS(qc_h5_file, params.covarfile)
-    COMPUTE_PCA(MAKEANALYSISSETS.out.flatten(), input_compute_pca)
+    COMPUTE_PCA(MAKEANALYSISSETS.out.study_arm_files.flatten(), input_compute_pca)
     MERGE_PCA(COMPUTE_PCA.out.eigenvec)
 
     // Branch based on analysis type
     if (params.longitudinal_flag | params.survival_flag) {
         GALLOPCOX_INPUT(gallopcph_chunks)
 
+        // Use combine with 'by' to safely pair each chromosome's PLINK files with its input chunks
         gallop_plink_input
-            .cross(GALLOPCOX_INPUT.out.splitText(file: true))
-            .flatten()
-            .collate(7)
-            .map{ it -> tuple(it[0], it[1], it[2], it[3], it[4], it[6]) }
+            .map{ chrName, plinkFiles -> tuple(chrName, plinkFiles) }
+            .combine(GALLOPCOX_INPUT.out.splitText(file: true), by: 0)
+            .map{ chrName, plinkFiles, lineFile ->
+                tuple(chrName, plinkFiles[0], plinkFiles[1], plinkFiles[2], plinkFiles[3], lineFile)
+            }
             .set{ GALLOPCPHCHUNKS }
 
         RAWFILE_EXPORT(GALLOPCPHCHUNKS, MERGE_PCA.out)

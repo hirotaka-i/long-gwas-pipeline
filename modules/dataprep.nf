@@ -12,13 +12,15 @@
 process MAKEANALYSISSETS {
   scratch true
   label 'medium'
-  storeDir "${STORE_DIR}/${params.dataset}/p3_COVARIATES_QC"
+  cache 'deep'
+  publishDir "${STORE_DIR}/${params.dataset}/p3_COVARIATES_QC", mode: 'copy', overwrite: true
 
   input:
     path samplelist
     path covarfile, stageAs: 'covariates.tsv'
   output:
-    path "${params.ancestry}_*_filtered.tsv"
+    path "${params.ancestry}_*_filtered.tsv", emit: study_arm_files
+    path "${params.ancestry}_analytical_set.tsv", emit: analytical_set
 
   script:
     """
@@ -216,6 +218,7 @@ process EXPORT_PLINK {
     """
     #!/usr/bin/env python3
     import pandas as pd
+    import numpy as np
     import time
     import sys
 
@@ -228,6 +231,21 @@ process EXPORT_PLINK {
 
     if d_result.shape[0] > 0:
       d_set = d_result.loc[:, ["#FID", "IID"] + all_phenos + covars].copy()
+      
+      # Convert binary phenotypes (0/1/missing) to PLINK format (1/2/-9)
+      for pheno_col in all_phenos:
+        if pheno_col in d_set.columns:
+          unique_vals = d_set[pheno_col].dropna().unique()
+          # Check if it's binary 0/1 coded (not already 1/2/-9)
+          if set(unique_vals).issubset({0, 1}) and len(unique_vals) > 0:
+            print(f"Converting binary phenotype '{pheno_col}' from 0/1 to PLINK format 1/2/-9")
+            # 0 -> 1 (control), 1 -> 2 (case), NaN -> -9 (missing)
+            d_set[pheno_col] = d_set[pheno_col].map({0: 1, 1: 2}).fillna(-9).astype(int)
+          elif set(unique_vals).issubset({1, 2, -9}):
+            # Already in PLINK format, ensure missing is -9
+            d_set[pheno_col] = d_set[pheno_col].fillna(-9).astype(int)
+            print(f"Phenotype '{pheno_col}' already in PLINK format 1/2/-9")
+      
       d_set.to_csv("${outfile}_analyzed.tsv", sep="\\t", index=False)
 
     time.sleep(10)

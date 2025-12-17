@@ -12,6 +12,8 @@ option_list <- list(
                  help="rawfile"),
   make_option( c("--covar-name"), type="character", default=NULL,
                  help="space delimited covariate list"),
+  make_option( c("--covar-categorical"), type="character", default="",
+                 help="space delimited categorical covariate list"),
   make_option( c("--pheno-name"), type="character", default="y",
                  help="phenotype / outcome column name"),
   make_option( c("--out"), type="character", 
@@ -33,6 +35,12 @@ input.covariates <- strsplit(opt[['covar-name']], ' ')
 
 print(input.covariates)
 
+# Parse categorical covariates
+input.categorical <- c()
+if (opt[['covar-categorical']] != "" && !is.null(opt[['covar-categorical']])) {
+  input.categorical <- unlist(strsplit(opt[['covar-categorical']], ' '))
+  print(paste("Categorical covariates:", paste(input.categorical, collapse=", ")))
+}
 
 data.pheno = read.table(opt$pheno, header=TRUE, comment.char='')
 data.covar = read.table(opt$covar, header=TRUE, comment.char='')
@@ -50,6 +58,34 @@ offset_col = 7 # offset for rawfile format
 
 print('finished loading data')
 data.merged = merge(data.covar, data.pheno)
+
+# Convert categorical covariates to factors
+if (length(input.categorical) > 0) {
+  for (cat_cov in input.categorical) {
+    if (cat_cov %in% colnames(data.merged)) {
+      data.merged[[cat_cov]] <- as.factor(data.merged[[cat_cov]])
+      print(paste("Converted", cat_cov, "to factor with", 
+                  length(levels(data.merged[[cat_cov]])), "levels"))
+    } else {
+      warning(paste("Categorical covariate", cat_cov, "not found in merged data"))
+    }
+  }
+}
+
+# Check for and remove constant covariates
+valid.covariates <- c()
+for (cov in unlist(input.covariates)) {
+  if (length(unique(data.merged[[cov]])) <= 1) {
+    warning(paste("Covariate", cov, "has only one unique value and will be dropped from the model"))
+  } else {
+    valid.covariates <- c(valid.covariates, cov)
+  }
+}
+input.covariates <- list(valid.covariates)
+
+if (length(valid.covariates) == 0) {
+  stop("No valid covariates remaining after filtering constant covariates")
+}
                          
 SNPs = input.genodata[
   grepl("^chr[0-9]", input.genodata[,1]),1]

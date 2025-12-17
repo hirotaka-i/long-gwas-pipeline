@@ -21,6 +21,8 @@ process GWASGLM {
 
   script:
     def covariates = "${params.covariates}".replaceAll(/ /, ",")
+    def covar_cat = params.covar_categorical ? "${params.covar_categorical}".replaceAll(/ /, ",") : ""
+    def covar_cat_flag = params.covar_categorical ? "--covar-cat-name ${covar_cat}" : ""
     def m = []
     def study_arm = samplelist.getName()
     m = study_arm =~ /(.*)_analyzed.tsv/
@@ -34,7 +36,7 @@ process GWASGLM {
     glm_phenocovar.py \
         --pheno_covar ${samplelist} \
         --phenname ${phenoname} \
-        --covname "${params.covariates}"
+        --covname "${params.covariates} ${params.covar_categorical}"
 
     plink2 --pfile ${fSimple} \
             --glm hide-covar omit-ref cols=+beta,+a1freq \
@@ -42,6 +44,7 @@ process GWASGLM {
             --pheno-name ${phenoname} \
             --covar "covar.tsv" \
             --covar-name ${covariates} \
+            ${covar_cat_flag} \
             --covar-variance-standardize \
             --keep "pheno.tsv" \
             --output-chr chrM \
@@ -93,12 +96,13 @@ process GWASGALLOP {
     set -x
     KEY="${pop_pheno}_${phenoname}"
 
-    gallop --gallop \
+    gallop.py --gallop \
            --rawfile ${rawfile} \
            --pheno "phenotypes.tsv" \
            --pheno-name "${phenoname}" \
            --covar ${samplelist} \
            --covar-name ${params.covariates} \
+           ${params.covar_categorical ? "--covar-cat-name ${params.covar_categorical}" : ""} \
            --time-name ${params.time_col} \
            --out "${outfile}"
     """
@@ -135,6 +139,7 @@ process GWASCPH {
                --pheno "phenotypes.tsv" \
                --covar ${samplelist} \
                --covar-name "${params.covariates}" \
+               --covar-categorical "${params.covar_categorical}" \
                --pheno-name "${phenoname}" \
                --out ${outfile}
     """

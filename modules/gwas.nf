@@ -140,6 +140,7 @@ process GWASCPH {
                --covar ${samplelist} \
                --covar-name "${params.covariates}" \
                --covar-categorical "${params.covar_categorical}" \
+               ${params.covar_interact ? "--covar-interact \"${params.covar_interact}\"" : ""} \
                --pheno-name "${phenoname}" \
                --out ${outfile}
     """

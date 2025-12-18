@@ -14,6 +14,8 @@ option_list <- list(
                  help="space delimited covariate list"),
   make_option( c("--covar-categorical"), type="character", default="",
                  help="space delimited categorical covariate list"),
+  make_option( c("--covar-interact"), type="character", default="",
+                 help="covariate to test for interaction with SNP (must be numeric)"),
   make_option( c("--pheno-name"), type="character", default="y",
                  help="phenotype / outcome column name"),
   make_option( c("--out"), type="character", 
@@ -31,9 +33,11 @@ arguments <- parse_args( parser, positional_arguments=TRUE )
 opt <- arguments$options
 args <- arguments$args
 
-input.covariates <- strsplit(opt[['covar-name']], ' ')
+input.covariates <- unlist(strsplit(opt[['covar-name']], ' '))
 
 print(input.covariates)
+
+
 
 # Parse categorical covariates
 input.categorical <- c()
@@ -71,20 +75,45 @@ if (length(input.categorical) > 0) {
     }
   }
 }
-
+all.covariates <- unlist(c(input.covariates, input.categorical))
 # Check for and remove constant covariates
 valid.covariates <- c()
-for (cov in unlist(input.covariates)) {
+for (cov in unlist(all.covariates)) {
   if (length(unique(data.merged[[cov]])) <= 1) {
     warning(paste("Covariate", cov, "has only one unique value and will be dropped from the model"))
   } else {
     valid.covariates <- c(valid.covariates, cov)
   }
 }
-input.covariates <- list(valid.covariates)
+input.covariates <- intersect(input.covariates, valid.covariates)
+input.categorical <- intersect(input.categorical, valid.covariates)
 
 if (length(valid.covariates) == 0) {
   stop("No valid covariates remaining after filtering constant covariates")
+}
+
+# Validate interaction covariate
+use_interaction <- FALSE
+interact_covar <- ""
+if (opt[['covar-interact']] != "" && !is.null(opt[['covar-interact']])) {
+  interact_covar <- opt[['covar-interact']]
+  
+  # Check if interaction covariate is in covariates list
+  if (!(interact_covar %in% unlist(input.covariates))) {
+    warning(paste("Interaction covariate", interact_covar, "not found in covariates list. Skipping interaction analysis."))
+  } else if (!(interact_covar %in% valid.covariates)) {
+    warning(paste("Interaction covariate", interact_covar, "is not valid (constant or missing). Skipping interaction analysis."))
+  } else if (interact_covar %in% input.categorical) {
+    warning(paste("Interaction covariate", interact_covar, "is categorical. Interaction requires numeric covariate. Skipping interaction analysis."))
+  } else {
+    # Check if it's numeric
+    if (!is.numeric(data.merged[[interact_covar]])) {
+      warning(paste("Interaction covariate", interact_covar, "is not numeric. Skipping interaction analysis."))
+    } else {
+      use_interaction <- TRUE
+      print(paste("Testing interaction between SNPs and", interact_covar))
+    }
+  }
 }
                          
 SNPs = input.genodata[
@@ -101,7 +130,8 @@ tmp.split <- sapply(SNPs,
 # initialize matrix
 snp_data <- matrix(NA, n_rows-1, n_snps)
 iids <- matrix('', n_rows-1, 1)
-stats <- matrix(NA, n_snps, 4)
+# Adjust stats matrix size based on whether interaction is used
+stats <- matrix(NA, n_snps, if (use_interaction) 8 else 4)
                     
 options(warn=-1)
                     
@@ -122,7 +152,7 @@ colnames(data.geno) <- c('IID', 'SNP')
 basemod <- paste0("Surv(tstart,tend,", opt[['pheno-name']], ")~")
 basemod <- paste0(basemod, paste(unlist(input.covariates), collapse="+"))
 mod_cols = c('coef', 'exp(coef)', 'se(coef)', 'Pr(>|z|)')
-print( paste("Base survival model", basemod) )
+print( paste("Base survival model (+SNP + SNP:interaction if specified)", basemod) )
 
 # ------ Fit CoxPH model ----
 
@@ -156,15 +186,41 @@ for (i in 1:n_snps) {
   # test SNP
   data.geno$SNP <- alt_counts
   data.mtx = merge( data.merged, data.geno, by='IID' )
-  eq = paste0(basemod, "+", 'SNP')
-  mdl = coxph(as.formula(eq), data=data.mtx)
-  res = summary(mdl)
-  stats[i,] = res$coefficients['SNP',][mod_cols]
+  
+  if (use_interaction) {
+    # Test SNP with interaction term
+    eq = paste0(basemod, "+", 'SNP+SNP:', interact_covar)
+    mdl = coxph(as.formula(eq), data=data.mtx)
+    res = summary(mdl)
+    
+    # Extract main SNP effect
+    snp_stats = res$coefficients['SNP',][mod_cols]
+    
+    # Extract interaction effect (could be SNP:covar or covar:SNP based on alphabetical order)
+    interact_term1 <- paste0('SNP:', interact_covar)
+    interact_term2 <- paste0(interact_covar, ':SNP')
+    interact_term <- if (interact_term1 %in% rownames(res$coefficients)) interact_term1 else interact_term2
+    interact_stats = res$coefficients[interact_term,][mod_cols]
+    
+    # Combine: main effect + interaction effect
+    stats[i,] = c(snp_stats, interact_stats)
+  } else {
+    # Ordinary analysis without interaction
+    eq = paste0(basemod, "+", 'SNP')
+    mdl = coxph(as.formula(eq), data=data.mtx)
+    res = summary(mdl)
+    stats[i,] = res$coefficients['SNP',][mod_cols]
+  }
 }
                     
                     
 stats = as.data.frame(stats)
-colnames(stats) = c('BETA', 'exp(BETA)', 'SE', 'P')
+if (use_interaction) {
+  colnames(stats) = c('BETA', 'exp(BETA)', 'SE', 'P', 'BETAi', 'exp(BETAi)', 'SEi', 'Pi')
+} else {
+  colnames(stats) = c('BETA', 'exp(BETA)', 'SE', 'P')
+}
+
 test_data <- as.data.frame(test_data)
 colnames(test_data) = c('#CHROM', 'POS', 'ID', 'REF', 'ALT', 'A1', 
                         'A1_FREQ', 'MISS_FREQ', 'OBS_CT', 'TEST')

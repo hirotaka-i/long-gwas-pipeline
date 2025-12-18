@@ -13,7 +13,7 @@ process MAKEANALYSISSETS {
   scratch true
   label 'medium'
   cache 'deep'
-  publishDir "${STORE_DIR}/${params.dataset}/p3_COVARIATES_QC", mode: 'copy', overwrite: true
+  publishDir "${STORE_DIR}/${params.genetic_cache_key}/${params.dataset}/p3_COVARIATES_QC", mode: 'copy', overwrite: true
 
   input:
     path samplelist
@@ -31,7 +31,7 @@ process MAKEANALYSISSETS {
 process COMPUTE_PCA {
   scratch true
   label 'large_mem'
-  storeDir "${STORE_DIR}/${params.dataset}/p3_PCA_QC/"
+  storeDir "${STORE_DIR}/${params.genetic_cache_key}/${params.dataset}/p3_PCA_QC/"
   publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/COMPUTE_PCA_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.log"
 
   input:
@@ -224,13 +224,24 @@ process EXPORT_PLINK {
 
     all_phenos = "${pheno_name}".split(',') if ',' in "${pheno_name}" else ["${pheno_name}"]
     covars = "${params.covariates}".split(' ')
-    d_pheno = pd.read_csv("phenotypes.tsv", sep="\\t", engine='c')
-    d_sample = pd.read_csv("${samplelist}", sep="\\t", engine='c')
+    covar_cat = "${params.covar_categorical}".split(' ') if "${params.covar_categorical}" else []
+    d_pheno = pd.read_csv("phenotypes.tsv", sep="\t", engine='c')
+    d_sample = pd.read_csv("${samplelist}", sep="\t", engine='c')
 
     d_result = pd.merge(d_pheno, d_sample, on='IID', how='inner')
 
     if d_result.shape[0] > 0:
+      # Start with base columns
       d_set = d_result.loc[:, ["#FID", "IID"] + all_phenos + covars].copy()
+      
+      # One-hot encode categorical covariates
+      if covar_cat:
+        for cat_col in covar_cat:
+          if cat_col in d_result.columns:
+            # Create dummy variables (drop first category to avoid multicollinearity)
+            dummies = pd.get_dummies(d_result[cat_col], prefix=cat_col, drop_first=True, dtype=int)
+            d_set = pd.concat([d_set, dummies], axis=1)
+            print(f"One-hot encoded '{cat_col}': {list(dummies.columns)}")
       
       # Convert binary phenotypes (0/1/missing) to PLINK format (1/2/-9)
       for pheno_col in all_phenos:

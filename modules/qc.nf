@@ -78,7 +78,7 @@ process CHECK_REFERENCES {
   """
 }
 
-/* Process 1 Run - Variant Standardization */
+/* Process 1a - Variant Standardization for VCF (chunked) */
 process GENETICQC {
   scratch true
   label 'medium'
@@ -87,20 +87,18 @@ process GENETICQC {
   input:
     tuple val(fileTag), path(fChunk)
   output:
-    tuple file("${chunkId}.bed"), file("${chunkId}.bim"), file("${chunkId}.fam"), optional: true, emit: snpchunks_merge
+    path("${chunkId}.*"), optional: true, emit: snpchunks_merge
     tuple val(fileTag), val(chunkId), optional: true, emit: snpchunks_names
     tuple val(fileTag), val(chunkId), path("${chunkId}.status.txt"), emit: chunk_status
 
   script:
-  // Use chunk left of vcf as prefix  chr22.1.vcf.gz -> chr20.1.vcf
-  def chunkBase = fChunk.getName()
-  def prefix = chunkBase.replaceFirst(/\.vcf(\.gz)?$/, '')
+  def prefix = fChunk.getSimpleName()
   chunkId = "${prefix}_p1out"
 
   """
-  set +e  # Don't exit on error
+  set +e
   
-  echo "Processing chunk: ${fChunk}"
+  echo "Processing VCF chunk: ${fChunk}"
   echo "Output prefix: ${prefix}"
   echo "Assigned cpus: ${task.cpus}"
   echo "Assigned memory: ${task.memory}"
@@ -117,7 +115,6 @@ process GENETICQC {
   EXIT_CODE=\$?
   END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
   
-  # Check if output files were created
   if [ -f "${chunkId}.bed" ] && [ -f "${chunkId}.bim" ] && [ -f "${chunkId}.fam" ]; then
     VARIANT_COUNT=\$(wc -l < ${chunkId}.bim)
     STATUS="SUCCESS"
@@ -125,13 +122,69 @@ process GENETICQC {
   else
     VARIANT_COUNT=0
     STATUS="FAILED"
-    echo "⚠ Warning: Chunk produced no variants after filtering (likely too small or low quality)" >&2
+    echo "⚠ Warning: Chunk produced no variants after filtering" >&2
   fi
   
-  # Write status as tab-separated single line
   echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\t\${STATUS}\t\${VARIANT_COUNT}" > ${chunkId}.status.txt
   
-  exit 0  # Always exit successfully to allow workflow continuation
+  exit 0
+  """
+}
+
+/* Process 1b - Variant Standardization for PLINK (per-chromosome, outputs to cache) */
+process GENETICQCPLINK {
+  scratch true
+  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p1_run_cache"
+  label 'medium'
+  errorStrategy 'ignore'
+
+  input:
+    tuple val(fileTag), path(fChunk)
+  output:
+    tuple path("${fileTag}.psam"), path("${fileTag}.pgen"), path("${fileTag}.pvar"), path("${fileTag}.log"), optional: true, emit: plink_qc_cached
+    tuple val(fileTag), path("${fileTag}.status.txt"), emit: chunk_status
+
+  script:
+  def prefix = fChunk[0].getSimpleName()
+
+  """
+  set +e
+  
+  echo "Processing PLINK file: ${fChunk}"
+  echo "Output prefix: ${fileTag}"
+  echo "Assigned cpus: ${task.cpus}"
+  echo "Assigned memory: ${task.memory}"
+  
+  START_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
+
+  process_plink.sh \
+    ${task.cpus} \
+    ${prefix} \
+    ${params.assembly} \
+    ${prefix}
+  
+  EXIT_CODE=\$?
+  END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
+  
+  # Rename output to match chromosome name (fileTag)
+  if [ -f "${prefix}_p1out.pgen" ] && [ -f "${prefix}_p1out.pvar" ] && [ -f "${prefix}_p1out.psam" ]; then
+    mv ${prefix}_p1out.pgen ${fileTag}.pgen
+    mv ${prefix}_p1out.pvar ${fileTag}.pvar
+    mv ${prefix}_p1out.psam ${fileTag}.psam
+    touch ${fileTag}.log
+    
+    VARIANT_COUNT=\$(wc -l < ${fileTag}.pvar | awk '{print \$1-1}')
+    STATUS="SUCCESS"
+    echo "✓ Successfully processed PLINK file with \${VARIANT_COUNT} variants"
+  else
+    VARIANT_COUNT=0
+    STATUS="FAILED"
+    echo "⚠ Warning: PLINK processing produced no variants" >&2
+  fi
+  
+  echo -e "${fileTag}\t${fileTag}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\t\${STATUS}\t\${VARIANT_COUNT}" > ${fileTag}.status.txt
+  
+  exit 0
   """
 }
 

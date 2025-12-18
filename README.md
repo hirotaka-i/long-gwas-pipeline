@@ -134,7 +134,7 @@ nextflow run main.nf -profile biowulf -params-file conf/examples/test_data.yml
 # or local
 nextflow run main.nf -profile biowulflocal -params-file conf/examples/test_data.yml
 ```
-
+f
 ### Verily Workbench / Google Cloud Batch
 ```bash
 # From within Verily Workbench VM
@@ -204,7 +204,7 @@ rm -rf ${STORE_ROOT}/${PROJECT_NAME}/work/
 ```
 
 #### 2. Persistent Cache (`cache/p1_run_cache/`)
-The pipeline stores processed genetic QC outputs in `${STORE_ROOT}/${PROJECT_NAME}/cache/p1_run_cache/` for **cross-session reuse**.
+The pipeline stores processed genetic QC outputs in `${STORE_ROOT}/${PROJECT_NAME}/cache/{genetic_cache}/p1_run_cache etc` for **cross-session reuse**.
 
 **What is `cache/` directory?**
 - Stores persistent QC results that survive across different pipeline runs

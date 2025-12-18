@@ -1,21 +1,20 @@
-# Example parameters for test dataset with longitudinal mixed models (LMM/GALLOP)
-# Usage: nextflow run main.nf -profile standard -params-file conf/examples/test_lmm.yml
+# Example parameters for cross-sectional linear analysis (chromosomes 20-22)
+# Usage: nextflow run main.nf -profile localtest -params-file conf/examples/test_cs_linear.yml
 
 # Input files - using example data
 input: "${projectDir}/example/genotype/chr2[0-2].vcf"
 covarfile: "${projectDir}/example/covariates.tsv"
-phenofile: "${projectDir}/example/phenotype.lt.tsv"
+phenofile: "${projectDir}/example/phenotype.cs.tsv"
 
 # Variable names in covariate/phenotype files
 pheno_name: "y"
 covariates: "SEX age_at_baseline"
 covar_categorical: "site specimen"
 study_arm_col: "study_arm"
-time_col: "study_days"
 
-# Analysis type - Longitudinal Mixed Model
-linear_flag: false
-longitudinal_flag: true
+# Analysis type - cross-sectional linear model
+linear_flag: true
+longitudinal_flag: false
 survival_flag: false
 
 # Processing options
@@ -23,7 +22,7 @@ chunk_flag: true
 chunk_size: 30000
 
 # Quality control parameters
-r2thres: -9  # Disable imputation quality filter for test data
+r2thres: -9  # Disable imputation quality filter for test
 minor_allele_freq: "0.05"
 minor_allele_ct: "20"
 kinship: "0.177"
@@ -31,13 +30,10 @@ kinship: "0.177"
 # Genetic parameters
 ancestry: "EUR"
 assembly: "hg19"
-
-# Skip population splitting mode
-skip_pop_split: true
+skip_pop_split: false
 
 # Dataset identifier
-dataset: "TEST_LMM_CHR20_22"
+dataset: "TEST_CS_CHR20_22"
 
 # Visualization
 mh_plot: true
-  

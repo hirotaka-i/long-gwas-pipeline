@@ -149,7 +149,6 @@ example/genotype/example.vcf/
 .nextflow/
 work/
 Docker
-example/
 *.env
 params_*.yml
 References/
@@ -159,3 +158,4 @@ report-*.html
 timeline-*.html 
 trace-*.txt
 .nextflow.log*
+z_*

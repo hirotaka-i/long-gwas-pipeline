@@ -44,7 +44,7 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
 /* 
  * Import consolidated modules
  */
-include { CHECK_REFERENCES; GENETICQC; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
+include { CHECK_REFERENCES; GENETICQC; GENETICQCPLINK; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
 include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; GALLOPCOX_INPUT; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
@@ -53,7 +53,7 @@ include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
  * Get the cache and the input check channels
  */
 Channel
-  .fromPath("${params.project_dir}/${params.dataset}/p1_run_cache/*", checkIfExists: false)
+  .fromPath("${params.project_dir}/cache/${params.genetic_cache_key}/p1_run_cache/*", checkIfExists: false)
   .map{ f -> tuple(f.getSimpleName(), f) }
   .set{ cache }
 
@@ -91,42 +91,86 @@ workflow {
         .map{ fileTag, fOrig, fCache -> tuple(fileTag, fOrig) }
         .set{ chrvcf }
 
-    // Efficient chunking: tag chunks by original input filename
-    // splitText preserves tuple elements before the file, so we need fileTag first
-    chrvcf
-    .map{ fileTag, fOrig -> fOrig }
-    .splitText(by: params.chunk_size, file: true, compress: true, keepHeader: true)
-    .map{ fChunk -> tuple(fChunk.getSimpleName(), fChunk) }
-    // fChunk = chr20.1.vcf.gz, 
-    .combine(CHECK_REFERENCES.out.references_flag)
-    .map{ fileTag, fChunk, references_flag -> tuple(fileTag, fChunk) }
-    .set{ input_p1_run_ch }
-
-    // Run genetic QC (depends on CHECK_REFERENCES completing)
-    GENETICQC(input_p1_run_ch)
+    // Determine input format from params.input pattern
+    def isPlink = params.input =~ /\.(bed|pgen)$/
     
-    // Collect chunk processing status for tracking (tab-separated table format)
-    GENETICQC.out.chunk_status
-        .map{ fileTag, chunkId, statusFile -> statusFile.text }
-        .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
-                     storeDir: "${OUTPUT_DIR}/${params.dataset}/LOGS/GENETICQC_STATUS/",
-                     seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
-                     newLine: false)
+    if (isPlink) {
+        // ============================================================
+        // PLINK INPUT PATHWAY: Direct cache, no chunking
+        // ============================================================
+        
+        // Gather all companion files (.pgen, .pvar, .psam or .bed, .bim, .fam)
+        chrvcf
+        .map{ fileTag, fOrig ->
+            def base = fOrig.toString().replaceFirst(/\.(bed|pgen)$/, '')
+            def ext = fOrig.name =~ /\.bed$/ ? ['bed', 'bim', 'fam'] : ['pgen', 'pvar', 'psam']
+            def files = ext.collect{ file("${base}.${it}") }
+            tuple(fileTag, files)
+        }
+        .combine(CHECK_REFERENCES.out.references_flag)
+        .map{ fileTag, fChunk, references_flag -> tuple(fileTag, fChunk) }
+        .set{ plink_input_ch }
 
-    GENETICQC.out.snpchunks_names
-        .collectFile(newLine: true) 
-                        { fileTag, chunkId -> ["${fileTag}.mergelist.txt", chunkId] }
-        .set{ chunknames }
+        // Process PLINK files directly to cache
+        GENETICQCPLINK(plink_input_ch)
+        
+        // Collect processing status for tracking
+        GENETICQCPLINK.out.chunk_status
+            .map{ fileTag, statusFile -> statusFile.text }
+            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
+                         storeDir: "${OUTPUT_DIR}/${params.dataset}/LOGS/GENETICQC_STATUS/",
+                         seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
+                         newLine: false)
+        
+        // PLINK output goes directly to chrsqced (already in pgen format, no merge needed)
+        GENETICQCPLINK.out.plink_qc_cached
+            .collect()
+            .flatten()
+            .map{ fn -> tuple(fn.getSimpleName(), fn) }
+            .concat(cache)
+            .set{ chrsqced }
+            
+    } else {
+        // ============================================================
+        // VCF INPUT PATHWAY: Chunk, process, merge
+        // ============================================================
+        
+        // Chunk VCF files
+        chrvcf
+        .map{ fileTag, fOrig -> fOrig }
+        .splitText(by: params.chunk_size, file: true, compress: true, keepHeader: true)
+        .map{ fChunk -> tuple(fChunk.getSimpleName(), fChunk) }
+        .combine(CHECK_REFERENCES.out.references_flag)
+        .map{ fileTag, fChunk, references_flag -> tuple(fileTag, fChunk) }
+        .set{ vcf_input_ch }
 
-    // Merge chunks
-    MERGER_CHUNKS(chunknames, GENETICQC.out.snpchunks_merge.collect())
-    
-    MERGER_CHUNKS.out
-        .collect()
-        .flatten()
-        .map{ fn -> tuple(fn.getSimpleName(), fn) }
-        .concat(cache)
-        .set{ chrsqced }
+        // Process VCF chunks
+        GENETICQC(vcf_input_ch)
+        
+        // Collect processing status for tracking
+        GENETICQC.out.chunk_status
+            .map{ fileTag, chunkId, statusFile -> statusFile.text }
+            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
+                         storeDir: "${OUTPUT_DIR}/${params.dataset}/LOGS/GENETICQC_STATUS/",
+                         seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
+                         newLine: false)
+
+        // Merge VCF chunks per chromosome
+        GENETICQC.out.snpchunks_names
+            .collectFile(newLine: true) 
+                            { fileTag, chunkId -> ["${fileTag}.mergelist.txt", chunkId] }
+            .set{ chunknames }
+
+        MERGER_CHUNKS(chunknames, GENETICQC.out.snpchunks_merge.collect())
+        
+        // VCF merged output goes to chrsqced
+        MERGER_CHUNKS.out
+            .collect()
+            .flatten()
+            .map{ fn -> tuple(fn.getSimpleName(), fn) }
+            .concat(cache)
+            .set{ chrsqced }
+    }
 
     // Branch based on skip_pop_split mode
     if (params.skip_pop_split) {
@@ -217,9 +261,10 @@ workflow {
 
     // Branch based on analysis type
     if (params.longitudinal_flag | params.survival_flag) {
+        // For longitudinal/survival: chunk variants and export to raw format
         GALLOPCOX_INPUT(gallopcph_chunks)
 
-        // Use combine with 'by' to safely pair each chromosome's PLINK files with its input chunks
+        // Combine PLINK files with variant chunks
         gallop_plink_input
             .map{ chrName, plinkFiles -> tuple(chrName, plinkFiles) }
             .combine(GALLOPCOX_INPUT.out.splitText(file: true), by: 0)
@@ -233,9 +278,16 @@ workflow {
         PLINK_SAMPLE_LIST = Channel.empty()
 
     } else {
+        // For cross-sectional: use PLINK binary directly (no chunking, no raw export)
         EXPORT_PLINK(MERGE_PCA.out.flatten(), params.phenofile)
         PLINK_SAMPLE_LIST = EXPORT_PLINK.out
-        CHUNKS = gallop_plink_input
+        
+        // Unpack PLINK files for GLM - convert from [chrName, [files]] to [chrName, file1, file2, file3, file4]
+        gallop_plink_input
+            .map{ chrName, plinkFiles -> 
+                tuple(chrName, plinkFiles[0], plinkFiles[1], plinkFiles[2], plinkFiles[3])
+            }
+            .set{ CHUNKS }
     }
 
     // ==================================================================================

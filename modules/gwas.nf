@@ -20,9 +20,6 @@ process GWASGLM {
     tuple env(KEY), path("*.results")
 
   script:
-    def covariates = "${params.covariates}".replaceAll(/ /, ",")
-    def covar_cat = params.covar_categorical ? "${params.covar_categorical}".replaceAll(/ /, ",") : ""
-    def covar_cat_flag = params.covar_categorical ? "--covar-cat-name ${covar_cat}" : ""
     def m = []
     def study_arm = samplelist.getName()
     m = study_arm =~ /(.*)_analyzed.tsv/
@@ -33,18 +30,21 @@ process GWASGLM {
     set -x
     KEY="${study_arm}_${phenoname}"
 
+    # Extract all covariate column names from the analyzed file (excluding #FID, IID, and phenotype)
+    awk 'NR==1 {first=1; for(i=1;i<=NF;i++){if(\$i!="#FID" && \$i!="IID" && \$i!="${phenoname}") {if(!first) printf ","; printf "%s", \$i; first=0}}} END {print ""}' ${samplelist} > covar_names.txt
+    COVAR_NAMES=\$(cat covar_names.txt)
+
     glm_phenocovar.py \
         --pheno_covar ${samplelist} \
         --phenname ${phenoname} \
-        --covname "${params.covariates} ${params.covar_categorical}"
+        --covname "\${COVAR_NAMES//,/ }"
 
     plink2 --pfile ${fSimple} \
             --glm hide-covar omit-ref cols=+beta,+a1freq \
             --pheno "pheno.tsv" \
             --pheno-name ${phenoname} \
             --covar "covar.tsv" \
-            --covar-name ${covariates} \
-            ${covar_cat_flag} \
+            --covar-name \${COVAR_NAMES} \
             --covar-variance-standardize \
             --keep "pheno.tsv" \
             --output-chr chrM \

@@ -69,7 +69,7 @@ RUN /usr/local/bin/micromamba create -y -p ${MAMBA_ROOT_PREFIX} \
     -c conda-forge -c bioconda \
     python=3.10 \
     plink=1.90b6.21 \
-    plink2=2.00a3.7 \
+    plink2=2.00a5.10 \
     bedtools=2.31.0 && \
     /usr/local/bin/micromamba clean -a -y
 
@@ -132,6 +132,13 @@ RUN wget -q http://csg.sph.umich.edu/abecasis/Metal/download/Linux-metal.tar.gz 
 RUN find /tmp -name "metal" -type f -executable -exec cp {} /usr/local/bin/metal \; && \
     chmod +x /usr/local/bin/metal && \
     rm -rf /tmp/generic-metal
+
+# ============================================
+# UCSC liftOver - for coordinate conversions
+# ============================================
+
+RUN wget -q http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/liftOver -O /usr/local/bin/liftOver && \
+    chmod +x /usr/local/bin/liftOver
 
 # ============================================
 # Ancestry reference panel
@@ -203,5 +210,5 @@ WORKDIR /workspace
 
 # Verify all tools
 RUN python3 --version && R --version && plink2 --version && \
-    bcftools --version && gsutil version && \
+    bcftools --version && gsutil version && liftOver 2>&1 | head -1 && \
     Rscript -e "library(survival); library(optparse); cat('✅ All installed!\n')"

@@ -526,7 +526,7 @@ https://www.nature.com/articles/s41598-018-24578-7
       all_covars = [c for c in data.columns if c not in ['id', 'time', pheno]]
       XY = data[['id', 'time', pheno] + all_covars].copy()
       XY.rename(columns={pheno: 'y'}, inplace=True)
-      base_formula = args.model if args.model else f'y ~ {" + ".join(args.covar_name)} + time' 
+      base_formula = args.model if args.model else f'y ~ {" + ".join(all_covars)} + time' 
       sys.stdout.write('Running GALLOP algorithm\n')
       sys.stdout.write(f'Fitting base model: {base_formula}\n') 
       base_mod = fit_lme(base_formula, XY)

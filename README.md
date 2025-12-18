@@ -2,7 +2,7 @@
 
 Repository for Nextflow pipeline to perform GWAS with longitudinal capabilities
 
-## Overview
+## Workflow Overview
 
 This pipeline supports three types of genetic association analyses:
 - **Cross-sectional** (GLM): Standard GWAS with single time-point phenotypes
@@ -22,7 +22,7 @@ Stage 3: GWAS Execution (GLM/GALLOP/CPH)
 Output: Association statistics + Manhattan plots
 ```
 
-## How to start
+## Starting Guide
 
 ### Prerequisites
 
@@ -46,7 +46,7 @@ cd long-gwas-pipeline
 ```
 
 
-#### Directory Structure
+### Output Directory Structure
 
 The pipeline uses a standardized directory structure across all profiles:
 
@@ -62,34 +62,61 @@ $STORE_ROOT/
 - `STORE_ROOT`: Root directory for all pipeline data - can be local path or GCS bucket (default: `$PWD`)
 - `PROJECT_NAME`: Unique identifier for your project (default: `unnamed_project`)
 
-**Other important folders**
+### Reference Folder Setup
 
-Nextflow automatically mounts your project's `bin/` and `modules/` directory into containers and adds it to PATH. This means you can modify Python, R, shell and workflow scripts without rebuilding Docker. See the [Developer's Guide](docs/DEVELOPER_GUIDE.md) for details.
-
-- `bin/`: Pipeline scripts (auto-mounted into containers)
-- `modules/`: Nextflow modules for each pipeline stage
-- `conf/`: Configuration profiles
-- `example/`: Example input genetics and clinical data for testing.
-- `References/`: Reference genome and chain files
+The `References/` folder contains reference genome FASTA files and chain files for liftover (to Hg38). They are required to be placed in the directory specified by the `reference_dir` parameter (default: `./References/`) with the following structure. 
 
 ```
 <reference_dir>/ # Directory specified by `reference_dir` parameter. Default: `./References/`
 ├── Genome/
 │   ├── hg38.fa.gz
 │   ├── hg38.fa.gz.fai
-│   ├── hg38.fa.gz.gzi
 │   ├── hg19.fa.gz
-│   ├── hg19.fa.gz.fai
-│   └── hg19.fa.gz.gzi
+│   └── hg19.fa.gz.fai
 └── liftOver/
     ├── hg19ToHg38.over.chain.gz
     └── hg18ToHg38.over.chain.gz
 ```
 
-These files are required for variant liftover and alignment during QC steps. When not available, the pipeline downloads them automatically as needed (takes some time). 
+Foe example, if your target genotyping data is hg19, you can download required files using the provided script:
+```bash
+bin/download_references.sh hg19 References
+```
+
+### Script and Module Folders
+
+- `bin/`: Pipeline scripts (auto-mounted into containers)
+- `modules/`: Nextflow modules for each pipeline stage
+
+Nextflow automatically mounts these directory into containers and adds it to PATH. This means you can modify Python, R, shell and workflow scripts without rebuilding the container. The container is the working environment with all dependencies pre-installed but the actual scripts are in these directories.
+
+### Example Data and Codes
+`./example/` folder has the following structure
+```
+example/
+├── genotype/          # Example VCF files (chr20-22)
+├── genotype_plink/    # Example PLINK files converted from VCFs
+├── covariate.csv      # Example covariate file     
+├── phenotype.cs.tsv   # Example cross-sectional phenotype file
+├── phenotype.lt.tsv   # Example longitudinal phenotype file (continuous)
+└── phenotype.surv.tsv # Example longitudinal phenotype file (survival)
+```
+**Note**: long-gwas-pipeline can work with PLINK files but VCF is preferred. VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization.
+
+### Configuration
+The pipeline is highly configurable. `./conf/` folder has configuration files for profiles and parameters.
+```
+conf/
+├── examples/    # Example parameter YAML files for different analytical modes using example dataset
+├── profiles/    # Profile configurations for different execution environments (local, biowulf, gcb, etc)
+├── base.config  # Base configuration file common to all profiles
+└── param.config # All the paramaters with default values and explanations
+```
+For more details on parameters, see [conf/params.config](conf/params.config).
+
 
 ## Running the Pipeline
-We use profiles to configure different execution environments (local, cloud, HPC). See [Configuration Guide](docs/config.md) for details. Paramaters can be set via YAML files (see `conf/examples/`).
+
 
 #### Set Environment Variables
 ```
@@ -98,18 +125,13 @@ export PROJECT_NAME='my_gwas_test'        # Unique project identifier
 ```
 
 #### Preparation of `Reference` folder. 
-This is optional, if we have the folders already, skip this step and specify the path via `reference_dir` parameter)
-```bash
-# hg19 example
-bin/download_references.sh hg19 References
-```
 
 
 ### Local Execution (from cloned repository)
 
 ```bash
-# Basic test run with example data
-nextflow run main.nf -profile standard -params-file conf/examples/test_data.yml
+# Basic test survival run with example data
+nextflow run main.nf -profile standard -params-file conf/examples/test_survival.yml
 ```
 Now you can customize `params.yml` with your own input files and parameters. see `conf/examples/` for more examples.
 
@@ -119,7 +141,7 @@ Now you can customize `params.yml` with your own input files and parameters. see
 # Build local Docker image first
 docker build --platform linux/amd64 -f Dockerfile.ubuntu22 -t longgwas-local-test .
 # Run with localtest profile
-nextflow run main.nf -profile localtest -params-file conf/examples/test_data.yml
+nextflow run main.nf -profile localtest -params-file conf/examples/test_survival.yml
 ```
 
 ### Biowulf
@@ -130,12 +152,13 @@ cd ./Docker
 singularity build long-gwas-pipeline.sif docker://ghcr.io/hirotaka-i/long-gwas-pipeline:0.1.0
 cd ..
 # Submit the slurm job from the main directory
-nextflow run main.nf -profile biowulf -params-file conf/examples/test_data.yml
+nextflow run main.nf -profile biowulf -params-file conf/examples/test_survival.yml
 # or local
-nextflow run main.nf -profile biowulflocal -params-file conf/examples/test_data.yml
+nextflow run main.nf -profile biowulflocal -params-file conf/examples/test_survival.yml
 ```
-f
+
 ### Verily Workbench / Google Cloud Batch
+For verily Workbench, first create a GCS bucket to store your data. Then run the following commands from within the Verily Workbench VM. You would need to get a Tower access token from https://cloud.seqera.io/tokens to monitor your runs on Seqera Tower.
 ```bash
 # From within Verily Workbench VM
 export STORE_ROOT='gs://<your-bucket-name>'  # Bucket you created above
@@ -143,11 +166,8 @@ export PROJECT_NAME='testrun'                # Any name for your project
 export TOWER_ACCESS_TOKEN='<your-token>'    # Get from https://cloud.seqera.io/tokens
 cd ~/repos/long-gwas-pipeline
 git pull origin main  # Update to latest code
-wb nextflow run main.nf -profile gcb -params-file conf/examples/test_data.yml -with-tower
+wb nextflow run main.nf -profile gcb -params-file conf/examples/test_survival.yml -with-tower
 ```
-See the [Verily Workbench Setup Guide](docs/vwb_setup.md) for complete instructions.
-
-[Configuration Guide](docs/config.md).
 
 
 ### (In progress) Remote Execution - no clone needed)
@@ -156,23 +176,13 @@ See the [Verily Workbench Setup Guide](docs/vwb_setup.md) for complete instructi
 # Run from GitHub main branch
 nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file myparams.yml
 
-# Run specific version/tag
-nextflow run hirotaka-i/long-gwas-pipeline -r v0.1.0 -profile standard -params-file conf/examples/test_data.yml
-
-# Latest release
-nextflow run hirotaka-i/long-gwas-pipeline -r latest -profile standard -params-file myparams.yml
 ```
 
-## Documentation
-- 📋 **[Parameters](docs/parameters.md)**: All pipeline parameters and options
-- 📊 **[File Formats](docs/file_formats.md)**: Input/output file specifications
-- 🔧 **[Configuration](docs/config.md)**: Profile and resource configuration
-- ☁️ **[Verily Workbench Setup](docs/vwb_setup.md)**: Running on Verily Workbench with Google Cloud Batch
 
 
 ## TIPS
+* `-resume` flag can be used to resume failed runs. Data modifications and model changes can reuse the cached qced-genetics.
 * `-with-dag flowchart.png` will also creates workflow DAG diagram in `flowchart.png`. 
-* `-resume` flag can be used to resume failed runs.
 * `-with-tower` flag can be used to monitor runs on Seqera Tower.
 
 ### More about Caching and Resume Behavior
@@ -268,35 +278,9 @@ nextflow run main.nf -profile gcb -params-file params.yml
 
 ## Troubleshooting
 
-### Common Issues
-
-**Permission denied on scripts**
-```bash
-chmod +x bin/*.py bin/*.sh bin/*.R
-```
-
-**Platform mismatch on Apple Silicon**
-```bash
-docker build --platform linux/amd64 -f Dockerfile.ubuntu22 -t longgwas-local-test .
-```
-
-**Pipeline errors**
-Check the detailed logs:
-```bash
-cat .nextflow.log
-cat work/XX/XXXXXXXXX/.command.log
-```
-
-For complete troubleshooting guide, see [Developer's Guide](docs/DEVELOPER_GUIDE.md#troubleshooting).
-
-## Citation
-
-If you use this pipeline, please cite:
-- [Original publication information]
-
-## License
-
-[License information]
+If the pipeline fails, check the following:
+- `.nextflow.log` for general errors
+- Review Nextflow logs in `work/` directory for error details of the failed process.
 
 ## Support
 
@@ -307,9 +291,10 @@ For issues and questions:
 
 
 ## Appendix for Docker Image Maintenance
-Docker images are built automatically via GitHub Actions. See [.github/DOCKER_BUILDS.md](.github/DOCKER_BUILDS.md) for details.
+Docker images are built automatically via GitHub Actions. 
 
 Local Docker image maintenance instructions are below.
+```
 # Weekly maintenance - safe - keeps tagged images, removes build cache
 docker system prune -f
 
@@ -318,3 +303,4 @@ docker builder prune -a -f
 
 # Nuclear option - rarely - use with caution
 docker system prune -a -f --volumes  # Only when you know what you're doing
+```

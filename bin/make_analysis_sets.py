@@ -144,8 +144,18 @@ def main():
         print(f'\n---- {study_arm} ----')
         
         study_arm_samples = analytical_set[analytical_set[study_arm_colname] == study_arm].copy(deep=True)
+        sample_count = len(study_arm_samples)
+        print(f'Samples in {study_arm}: {sample_count}')
+        
+        # Enforce minimum sample requirement
+        if sample_count <= 50:
+            error_msg = f"\nERROR: Insufficient samples in study arm '{study_arm}'\n"
+            error_msg += f"Found {sample_count} samples, but minimum required is 51.\n"
+            error_msg += f"This study arm/type does not meet the minimum sample requirement for analysis.\n"
+            print(error_msg, file=sys.stderr)
+            sys.exit(1)
+        
         study_arm_samples.to_csv(f"{ancestry}_{study_arm}_filtered.tsv", sep="\t", index=False)
-        print(f'Samples in {study_arm}: {len(study_arm_samples)}')
     
     time.sleep(5)
 

@@ -60,7 +60,7 @@ RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
 
 # ============================================
 # Install Python 3.10 and bioinformatics tools via bioconda
-# PLINK, PLINK2, bedtools
+# PLINK, bedtools (PLINK2 installed separately below)
 # Note: GCTA removed - not used in pipeline
 # ============================================
 
@@ -69,9 +69,20 @@ RUN /usr/local/bin/micromamba create -y -p ${MAMBA_ROOT_PREFIX} \
     -c conda-forge -c bioconda \
     python=3.10 \
     plink=1.90b6.21 \
-    plink2=2.00a5.10 \
     bedtools=2.31.0 && \
     /usr/local/bin/micromamba clean -a -y
+
+# ============================================
+# PLINK2 - Download latest version from homepage
+# Using plink2_linux_x86_64_20251205 for --update-chr support
+# ============================================
+
+RUN wget -q https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20251205.zip -O /tmp/plink2.zip && \
+    cd /tmp && \
+    unzip -q plink2.zip && \
+    mv plink2 /usr/local/bin/plink2 && \
+    chmod +x /usr/local/bin/plink2 && \
+    rm -f /tmp/plink2.zip /tmp/vcf_subset /tmp/intel-simplified-software-license.txt
 
 # ============================================
 # HTSlib, SAMtools, BCFtools from stable sources

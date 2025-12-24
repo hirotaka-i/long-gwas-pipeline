@@ -12,7 +12,7 @@ process GWASGLM {
   label 'medium'
 
   input:
-    tuple val(fSimple), path(plog), path(pgen), path(psam), path(pvar)
+    tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar)
     each samplelist
     each phenoname
 
@@ -22,9 +22,9 @@ process GWASGLM {
   script:
     def m = []
     def study_arm = samplelist.getName()
-    m = study_arm =~ /(.*)_analyzed.tsv/
+    m = study_arm =~ /(.*)_filtered\.pca\.pheno\.tsv/
     study_arm = m[0][1]
-    def outfile = "${study_arm}_${fSimple}"
+    def outfile = "${study_arm}_${fileTag}"
 
     """
     set -x
@@ -39,7 +39,7 @@ process GWASGLM {
         --phenname ${phenoname} \
         --covname "\${COVAR_NAMES//,/ }"
 
-    plink2 --pfile ${fSimple} \
+    plink2 --pfile ${fileTag} \
             --glm hide-covar omit-ref cols=+beta,+a1freq \
             --pheno "pheno.tsv" \
             --pheno-name ${phenoname} \
@@ -69,7 +69,7 @@ process GWASGALLOP {
   label 'medium'
 
   input:
-    tuple val(fSimple), path(samplelist), path(rawfile)
+    tuple val(fileTag), path(samplelist), path(rawfile)
     path x, stageAs: 'phenotypes.tsv'
     each phenoname
 
@@ -113,7 +113,7 @@ process GWASCPH {
   label 'medium'
 
   input:
-    tuple val(fSimple), path(samplelist), path(rawfile)
+    tuple val(fileTag), path(samplelist), path(rawfile)
     path x, stageAs: 'phenotypes.tsv'
     each phenoname
 

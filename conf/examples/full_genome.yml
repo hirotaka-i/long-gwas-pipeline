@@ -33,7 +33,7 @@ assembly: "hg38"  # hg19 or hg38
 skip_pop_split: false
 
 # Dataset identifier (used for caching)
-dataset: "MY_GWAS"
+analysis_name: "MY_GWAS"
 
 # Visualization
 mh_plot: true

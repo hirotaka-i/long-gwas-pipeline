@@ -129,7 +129,7 @@ def main():
     print(f'After kinship removal: {len(analytical_set)} (removed {kinship_removed_count})')
     
     # Write out the full analytical set (all study arms combined)
-    analytical_set_filename = f"{ancestry}_analytical_set.tsv"
+    analytical_set_filename = f"{ancestry}_all.tsv"
     analytical_set.to_csv(analytical_set_filename, sep="\t", index=False)
     print(f'\nFull analytical set saved: {analytical_set_filename}')
     print(f'Final analytical set: {len(analytical_set)} samples')

@@ -37,7 +37,7 @@ assembly: "hg38"
 skip_pop_split: true
 
 # Dataset identifier
-dataset: "ANCESTRY_SPECIFIC"
+analysis_name: "ANCESTRY_SPECIFIC"
 
 # Visualization
 mh_plot: true

@@ -13,14 +13,14 @@ process MAKEANALYSISSETS {
   scratch true
   label 'medium'
   cache 'deep'
-  publishDir "${STORE_DIR}/${params.genetic_cache_key}/${params.dataset}/p3_COVARIATES_QC", mode: 'copy', overwrite: true
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
 
   input:
     path samplelist
     path covarfile, stageAs: 'covariates.tsv'
   output:
     path "${params.ancestry}_*_filtered.tsv", emit: study_arm_files
-    path "${params.ancestry}_analytical_set.tsv", emit: analytical_set
+    path "${params.ancestry}_all.tsv", emit: analytical_set
 
   script:
     """
@@ -31,8 +31,8 @@ process MAKEANALYSISSETS {
 process COMPUTE_PCA {
   scratch true
   label 'large_mem'
-  storeDir "${STORE_DIR}/${params.genetic_cache_key}/${params.dataset}/p3_PCA_QC/"
-  publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/COMPUTE_PCA_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.log"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/pca", mode: 'copy', overwrite: true, pattern: "*.eigenvec"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.log"
 
   input:
     each path(samplelist)
@@ -53,7 +53,7 @@ process COMPUTE_PCA {
     plink2 \
           --indep-pairwise 50 .2 \
           --maf ${params.minor_allele_freq} \
-          --pfile "allchr_${params.dataset}_p2in" \
+          --pfile "allchr_${params.analysis_name}_p2in" \
           --out ${study_arm}.ld
 
     plink2 \
@@ -63,13 +63,14 @@ process COMPUTE_PCA {
           --pca 10 \
           --threads ${task.cpus} \
           --memory ${task.memory.toMega()} \
-          --pfile "allchr_${params.dataset}_p2in"
+          --pfile "allchr_${params.analysis_name}_p2in"
     """
 }
 
 process MERGE_PCA {
   scratch true
   label 'small'
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
   
   input:
     tuple path(samplelist), path(study_arm_pca)
@@ -105,15 +106,15 @@ process GALLOPCOX_INPUT {
   label 'small'
   
   input:
-    tuple val(chrname), path(plink_input)
+    tuple val(fileTag), path(plink_input)
   output:
-    tuple val(chrname), path("allchr_${params.dataset}_p2in.txt")
+    tuple val(fileTag), path("allchr_${params.analysis_name}_p2in.txt")
   
   script:
     """
     #!/usr/bin/env python3
     fn = "${plink_input}"
-    out_fn = "allchr_${params.dataset}_p2in.txt"
+    out_fn = "allchr_${params.analysis_name}_p2in.txt"
     count = 0
     id_pairs = []
     start, end =  None,None
@@ -147,14 +148,14 @@ process GALLOPCOX_INPUT {
 process RAWFILE_EXPORT {
   scratch true
   label 'small'
-  publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/RAWFILE_EXPORT_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.log"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.log"
 
   input:
-    tuple val(fSimple), path(plog), path(pgen), path(psam), path(pvar), path(plink_chunk)
+    tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar), path(plink_chunk)
     each path(samplelist)
 
   output:
-    tuple val(fSimple), path(samplelist), path('*.raw'), emit: gwas_rawfile
+    tuple val(fileTag), path(samplelist), path('*.raw'), emit: gwas_rawfile
     path "*.log", emit: gwas_rawfile_log
 
   when:
@@ -166,7 +167,7 @@ process RAWFILE_EXPORT {
     m = study_arm =~ /(.*)_filtered.pca.tsv/
     study_arm = m[0][1]
 
-    def outfile = "${study_arm}_${fSimple}"
+    def outfile = "${study_arm}_${fileTag}"
 
     """
     set -x
@@ -176,7 +177,7 @@ process RAWFILE_EXPORT {
     echo \${to}
     nameout="${outfile}_\${from}_\${to}"
 
-    plink2 --pfile ${fSimple} \
+    plink2 --pfile ${fileTag} \
            --keep ${samplelist} \
            --export A \
            --from \${from} \
@@ -196,12 +197,13 @@ process EXPORT_PLINK {
   debug true
   scratch true
   label 'small'
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
 
   input:
     path samplelist
     path x, stageAs: 'phenotypes.tsv'
   output:
-    path "*_analyzed.tsv", optional: true
+    path "*_filtered.pca.pheno.tsv", optional: true
 
   script:
     def m = []
@@ -231,8 +233,10 @@ process EXPORT_PLINK {
     d_result = pd.merge(d_pheno, d_sample, on='IID', how='inner')
 
     if d_result.shape[0] > 0:
-      # Start with base columns
-      d_set = d_result.loc[:, ["#FID", "IID"] + all_phenos + covars].copy()
+      # Start with base columns + PCA columns from merged result
+      pca_cols = [col for col in d_result.columns if col.startswith('PC')]
+      d_set = d_result.loc[:, ["#FID", "IID"] + all_phenos + covars + pca_cols].copy()
+      print(f"Including {len(pca_cols)} PCA columns: {pca_cols}")
       
       # One-hot encode categorical covariates
       if covar_cat:
@@ -257,7 +261,7 @@ process EXPORT_PLINK {
             d_set[pheno_col] = d_set[pheno_col].fillna(-9).astype(int)
             print(f"Phenotype '{pheno_col}' already in PLINK format 1/2/-9")
       
-      d_set.to_csv("${outfile}_analyzed.tsv", sep="\\t", index=False)
+      d_set.to_csv("${outfile}_filtered.pca.pheno.tsv", sep="\\t", index=False)
 
     time.sleep(10)
     """

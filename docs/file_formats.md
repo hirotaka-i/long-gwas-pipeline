@@ -75,7 +75,6 @@ Tab-delimited file with header row.
 **Required columns:**
 - `#FID`: Family ID (can be 0 for unrelated samples)
 - `IID`: Individual/Sample ID (must match VCF sample IDs)
-- `PHENO`: Phenotype placeholder (can be 0, not used in analysis)
 
 **Additional covariate columns:**
 - Any columns you want to include as covariates
@@ -84,25 +83,13 @@ Tab-delimited file with header row.
 ### Example
 
 ```tsv
-#FID	IID	SEX	PHENO	study_arm	apoe4	levodopa_usage	age_at_baseline	education_years
-0	sid-1	1	0	control	0	0	35	16
-0	sid-2	1	0	control	0	0	40	12
-0	sid-3	0	0	control	1	0	32	18
-0	sid-4	0	0	PD	0	1	45	14
-0	sid-5	1	0	PD	1	0	55	16
-0	sid-6	0	0	PD	0	1	66	12
-0	sid-7	1	0	PD	0	0	58	20
+#FID	IID	SEX	study_arm	age_at_baseline	site	specimen
+0	sid-414	1	intermediate	79.6	C	no
+0	sid-645	2	intermediate	82.6	A	yes
+0	sid-558	1	intermediate	60.6	C	no
+0	sid-284	2	control	70.7	C	no
 ```
 
-### Column Specifications
-
-| Column | Type | Values | Description |
-|--------|------|--------|-------------|
-| `#FID` | Integer | Any | Family ID (0 for unrelated) |
-| `IID` | String | Match VCF | Individual ID |
-| `SEX` | Integer | 0=female, 1=male | Biological sex |
-| `PHENO` | Integer | 0 | Placeholder (not used) |
-| Custom | Numeric/Binary | Any | Your covariates |
 
 **Notes:**
 - PCA components (PC1-PC10) are computed automatically from genetic data
@@ -127,10 +114,6 @@ IID	y
 sid-1	23.5
 sid-2	25.1
 sid-3	22.8
-sid-4	24.3
-sid-5	26.7
-sid-6	23.9
-sid-7	25.4
 ```
 
 **Data types:**
@@ -156,13 +139,6 @@ sid-1	23.5	0
 sid-1	24.1	90
 sid-1	24.8	180
 sid-1	25.2	365
-sid-2	25.1	0
-sid-2	24.9	90
-sid-2	25.3	180
-sid-3	22.8	0
-sid-3	23.1	90
-sid-3	22.5	180
-sid-3	23.0	365
 ```
 
 **Time variable specifications:**
@@ -178,26 +154,17 @@ sid-3	23.0	365
   - 0 = censored (no event occurred)
   - 1 = event occurred
 - `time_to_event`: Time to event or censoring (or custom via `--time_col`)
+  - `tstart` and `tend` are automatically generated from `time_to_event` and used in the analysis. If you want to use different time to start/end, you can hard cord `tstart` and `tend` as well. 
 
 **Example:**
+`time_to_event` column is `study_days` in the following example
 ```tsv
-IID	surv_y	time_to_event	age_at_baseline
-sid-1	0	1825	55
-sid-2	1	730	60
-sid-3	0	2190	52
-sid-4	1	365	68
-sid-5	0	1095	58
-sid-6	1	1460	72
-sid-7	0	912	63
+IID	y	study_days	surv_y	tstart	tend
+sid-1	115.97392441028578	730.5	1	0	730.5
+sid-10	86.8996551417189	182.625	1	0	182.625
+sid-100	150.4507827126939	2556.75	1	0	2556.75
 ```
 
-**Column specifications:**
-
-| Column | Type | Values | Description |
-|--------|------|--------|-------------|
-| `IID` | String | Match VCF | Individual ID |
-| `surv_y` | Binary | 0/1 | Event status (0=censored, 1=event) |
-| `time_to_event` | Numeric | Days | Time from baseline to event/censoring |
 
 **Notes:**
 - Time can be in days, months, or years (specify units consistently)

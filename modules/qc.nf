@@ -2,6 +2,7 @@
  * Consolidated QC Module
  * Contains all quality control processes:
  * - CHECK_REFERENCES: Verify reference genomes exist (process 0 - runs once)
+ * - ADD_HEADER_TO_CHUNKS: Add VCF header to chunks that lack it
  * - GENETICQC: Genotype preprocessing and filtering
  * - MERGER_CHUNKS: Merge chromosome chunks
  * - MERGER_CHRS: Merge all chromosomes
@@ -85,29 +86,66 @@ process GENETICQC {
   errorStrategy 'ignore'
 
   input:
-    tuple val(fileTag), path(fChunk)
+    tuple val(fileTag), path(fOrig), path(fChunk)
   output:
     path("${chunkId}.*"), optional: true, emit: snpchunks_merge
     tuple val(fileTag), val(chunkId), optional: true, emit: snpchunks_names
     tuple val(fileTag), val(chunkId), path("${chunkId}.status.txt"), emit: chunk_status
 
   script:
-  def prefix = fChunk.getSimpleName()
+  def fileName = fChunk.getName()
+  def prefix = fileName.replaceAll(/\.(vcf|bcf)(\.gz)?$/, '')
   chunkId = "${prefix}_p1out"
 
   """
   set +e
   
-  echo "Processing VCF chunk: ${fChunk}"
-  echo "Output prefix: ${prefix}"
+  echo "=== GENETICQC Debug Info ==="
+  echo "fileTag: ${fileTag}"
+  echo "fOrig: ${fOrig}"
+  echo "fChunk: ${fChunk}"
+  echo "fileName: ${fileName}"
+  echo "prefix: ${prefix}"
+  echo "chunkId: ${chunkId}"
   echo "Assigned cpus: ${task.cpus}"
   echo "Assigned memory: ${task.memory}"
+  echo ""
   
   START_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
 
+  # Check if chunk already has header (first chunk with splitText keepHeader:false still has header)
+  if [[ ${fChunk} == *.gz ]]; then
+    CHUNK_HEADER_LINES=\$(gunzip -c ${fChunk} | grep -c "^#" || echo 0)
+  else
+    CHUNK_HEADER_LINES=\$(grep -c "^#" ${fChunk} || echo 0)
+  fi
+  
+  echo "Chunk header lines: \${CHUNK_HEADER_LINES}"
+  
+  if [ "\${CHUNK_HEADER_LINES}" -gt 0 ]; then
+    echo "Chunk already has header, using as-is"
+    cp ${fChunk} ${prefix}_with_header.vcf.gz
+  else
+    echo "Chunk missing header, extracting from original file"
+    # Extract header from original VCF using bcftools
+    bcftools view -h ${fOrig} > header.txt
+    HEADER_LINES=\$(wc -l < header.txt)
+    echo "Extracted \${HEADER_LINES} header lines from original file"
+    
+    # Combine header with chunk data
+    if [[ ${fChunk} == *.gz ]]; then
+      cat header.txt <(gunzip -c ${fChunk}) | bgzip > ${prefix}_with_header.vcf.gz
+    else
+      cat header.txt ${fChunk} | bgzip > ${prefix}_with_header.vcf.gz
+    fi
+  fi
+  
+  echo "Created ${prefix}_with_header.vcf.gz"
+  ls -lh ${prefix}_with_header.vcf.gz
+
   process1.sh \
     ${task.cpus} \
-    ${fChunk} \
+    ${prefix}_with_header.vcf.gz \
     ${params.r2thres} \
     ${params.assembly} \
     ${prefix}
@@ -134,7 +172,7 @@ process GENETICQC {
 /* Process 1b - Variant Standardization for PLINK (per-chromosome, outputs to cache) */
 process GENETICQCPLINK {
   scratch true
-  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p1_run_cache"
+  storeDir "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${fileTag}"
   label 'medium'
   errorStrategy 'ignore'
 
@@ -190,18 +228,17 @@ process GENETICQCPLINK {
 
 process MERGER_CHUNKS {
   scratch true
-  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p1_run_cache"
-  publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/MERGER_CHUNKS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.log"
   label 'large_mem'
+  storeDir { "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${mergelist.getSimpleName()}" }
 
   input:
     file mergelist
     file "*"
   output:
-    tuple file("${vSimple}.psam"), file("${vSimple}.pgen"), file("${vSimple}.pvar"), file("${vSimple}.log"), emit: snpchunks_qc_merged
+    tuple file("${fileTag}.psam"), file("${fileTag}.pgen"), file("${fileTag}.pvar"), file("${fileTag}.log"), emit: snpchunks_qc_merged
 
   script:
-    vSimple = mergelist.getSimpleName()
+    fileTag = mergelist.getSimpleName()
     if (params.chunk_flag) {
       """
       set +x
@@ -209,38 +246,38 @@ process MERGER_CHUNKS {
       plink --merge-list ${mergelist} \
         --keep-allele-order \
         --threads ${task.cpus} \
-        --out ${vSimple}
+        --out ${fileTag}
       
-      plink2 --bfile ${vSimple} \
+      plink2 --bfile ${fileTag} \
         --make-pgen \
         --sort-vars \
         --threads ${task.cpus} \
-        --out ${vSimple}
+        --out ${fileTag}
       """
     } else {
       """
       set +x
       
-      plink2 -pfile ${vSimple}.1_p1out \
+      plink2 -pfile ${fileTag}.1_p1out \
         --make-pgen \
         --sort-vars \
         --threads ${task.cpus} \
-        --out ${vSimple}
+        --out ${fileTag}
       """
     }
 }
 
 process MERGER_CHRS {
   scratch true
-  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p2_merged_cache"
-  publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/MERGER_CHRS_LOGS_${params.datetime}/logs", mode: 'copy', overwrite: true, pattern: "*.log"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/merged_genotypes", mode: 'copy', overwrite: true, pattern: "*.{pgen,pvar,psam}"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/logs/merge_all", mode: 'copy', overwrite: true, pattern: "*.log"
   label 'large_mem'
 
   input:
     file mergelist
     path "*"
   output:
-    path ("allchr_${params.dataset}_p2in.{bed,fam,bim,pgen,pvar,psam,log}")
+    path ("allchr_${params.analysis_name}_p2in.{bed,fam,bim,pgen,pvar,psam,log}")
 
   script:
     """
@@ -251,14 +288,13 @@ process MERGER_CHRS {
       --pmerge-list "tmp_mergefile.txt" \
       --keep-allele-order \
       --make-bed \
-      --out "allchr_${params.dataset}_p2in"
+      --out "allchr_${params.analysis_name}_p2in"
     """
 }
 
 /* LD Prune per chromosome (for skip population splitting mode) */
 process LD_PRUNE_CHR {
   scratch true
-  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p2_ldprune_cache"
   label 'medium'
 
   input:
@@ -290,9 +326,8 @@ process LD_PRUNE_CHR {
 
 /* Simple QC without ancestry inference (for skip population splitting mode) */
 process SIMPLE_QC {
-  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p2_qc_pipeline_cache"
-  publishDir "${OUTPUT_DIR}/${params.dataset}/LOGS/SIMPLEQC_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.txt"
-  publishDir "${OUTPUT_DIR}/${params.dataset}/PLOTS/SIMPLEQC_PLOTS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.png"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.{h5,txt}"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.png"
   label 'large_mem'
   
   input:
@@ -307,7 +342,7 @@ process SIMPLE_QC {
     set +x
     
     simple_qc.sh \
-      "allchr_${params.dataset}_p2in" \
+      "allchr_${params.analysis_name}_p2in" \
       "${params.kinship}" \
       "${params.ancestry}_samplelist_p2out" \
       ${task.cpus}
@@ -315,8 +350,8 @@ process SIMPLE_QC {
 }
 
 process GWASQC {
-  storeDir "${STORE_DIR}/${params.genetic_cache_key}/p2_qc_pipeline_cache"
-  publishDir "${OUTPUT_DIR}/${params.dataset}/PLOTS/GWASQC_PLOTS_${params.datetime}/", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.h5"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
   label 'large_mem'
   
   input:
@@ -330,7 +365,7 @@ process GWASQC {
     set +x
     
     addi_qc_pipeline.py \
-      --geno "allchr_${params.dataset}_p2in" \
+      --geno "allchr_${params.analysis_name}_p2in" \
       --ref "/srv/GWAS-Pipeline/References/ref_panel/1kg_ashkj_ref_panel_gp2_pruned_hg38_newids" \
       --ref_labels "/srv/GWAS-Pipeline/References/ref_panel/ancestry_ref_labels.txt" \
       --pop "${params.ancestry}" \

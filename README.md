@@ -53,8 +53,8 @@ The pipeline uses a standardized directory structure across all profiles:
 ```
 $STORE_ROOT/
 └── $PROJECT_NAME/
-    ├── cache/           # Persistent cache for genetic QC (p1_run_cache/)
-    ├── results/         # Final GWAS results and plots
+    ├── genotypes/       # Persistent cache for variant standardized chromosome-level PLINK files
+    ├── analyses/        # Subsequent analysis using the genotypes from above
     └── work/            # Nextflow work directory (temporary)
 ```
 

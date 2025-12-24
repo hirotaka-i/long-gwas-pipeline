@@ -33,10 +33,10 @@ ancestry: "EUR"
 assembly: "hg19"
 
 # Skip population splitting mode
-skip_pop_split: true
+skip_pop_split: false
 
 # Dataset identifier
-dataset: "TEST_LMM_CHR20_22"
+analysis_name: "TEST_LMM"
 
 # Visualization
 mh_plot: true

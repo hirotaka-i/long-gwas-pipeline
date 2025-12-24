@@ -3,7 +3,7 @@
 
 # Input files - using example data
 # Note: Use ${projectDir} or absolute paths when running from GitHub
-input: "${projectDir}/example/genotype/chr2[0-2].vcf"
+input: "${projectDir}/example/genotype/chr2[1-2].vcf"
 covarfile: "${projectDir}/example/covariates.tsv"
 phenofile: "${projectDir}/example/phenotype.surv.tsv"
 
@@ -34,7 +34,7 @@ assembly: "hg19"
 skip_pop_split: false
 
 # Dataset identifier
-dataset: "TEST_SURV_CHR20_22"
+analysis_name: "TEST_SURV"
 
 # Visualization
 mh_plot: true

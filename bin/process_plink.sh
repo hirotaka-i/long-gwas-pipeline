@@ -36,14 +36,13 @@ echo "[INFO] Processing: ${INFILE} -> ${OUTPREFIX}"
 echo "[INFO] Assembly: ${ASSEMBLY} -> hg38"
 echo "[INFO] Threads: ${N}"
 
-# Step 1: Remove duplicates, keep biallelic SNPs only, MAF>=2, missingness<=10%
+# Step 1: Remove duplicates, keep biallelic SNPs only, MAF>=2
 plink2 ${INFMT} "${INFILE}" \
        --rm-dup exclude-all \
        --snps-only just-acgt \
        --max-alleles 2 \
        --mac 2 \
        --make-pgen \
-       --geno 0.1 \
        --threads "$N" \
        --out "${OUTPREFIX}_dedup"
 
@@ -140,21 +139,32 @@ plink2 --pfile "$WORKPFX" \
        --threads "$N" \
        --out "${OUTPREFIX}_norm"
 
+# Step 4: geno 0.1 and convert to hard-call
+## without this process, raw file has dosage and inconsistent with VCF-based processing)
+plink2 --pfile "${OUTPREFIX}_norm" \
+       --geno 0.1 \
+       --make-bed \
+       --keep-allele-order \
+       --threads "$N" \
+       --out "${OUTPREFIX}_geno_hc"
+
+
 # Step 4: Align REF/ALT to reference FASTA
 echo "[INFO] Aligning REF/ALT to hg38 reference"
-plink2 --pfile "${OUTPREFIX}_norm" \
+plink2 --bfile "${OUTPREFIX}_geno_hc" \
        --fa "$FA_HG38" \
        --ref-from-fa force \
        --make-pgen \
        --threads "$N" \
        --out "${OUTPREFIX}_refalign"
 
-# Step 5: Set final variant IDs and output as pgen format (compatible with MERGER_CHRS)
+# Step 6: Set final variant IDs and output as pgen format (compatible with MERGER_CHRS)
 plink2 --pfile "${OUTPREFIX}_refalign" \
        --set-all-var-ids 'chr@:#:$r:$a' \
        --new-id-max-allele-len 999 truncate \
        --rm-dup exclude-all \
        --chr 1-22,X,Y \
+       --sort-vars \
        --make-pgen \
        --threads "$N" \
        --out "${OUTPREFIX}_p1out"
@@ -164,6 +174,7 @@ echo "[INFO] Complete: ${OUTPREFIX}_p1out.{pgen,pvar,psam}"
 # Cleanup intermediate files
 rm -f "${OUTPREFIX}_dedup".{pgen,pvar,psam,log} \
       "${OUTPREFIX}_dedup_r2filtered".{pgen,pvar,psam,log} \
+      "${OUTPREFIX}_geno".{bed,bim,fam,log} \
       "${OUTPREFIX}_named".{pgen,pvar,psam,log} \
       "${OUTPREFIX}_hg38".{pgen,pvar,psam,log} \
       "${OUTPREFIX}_refalign".{pgen,pvar,psam,log} \

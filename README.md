@@ -101,7 +101,9 @@ example/
 ├── phenotype.lt.tsv   # Example longitudinal phenotype file (continuous)
 └── phenotype.surv.tsv # Example longitudinal phenotype file (survival)
 ```
-**Note**: long-gwas-pipeline can work with PLINK files but VCF is preferred. VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization. Plink2 input skips the chunking and merging ended up the slightly different results from the equivalent same vcf input. 
+**Note**: 
+1. Because current workflow requires merging process using plink1.9, we use hard-calls not dosages.
+2. PLINK files can be an input if they are chromosome separated. But VCF input is preferred as the VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization.
 
 ### Configuration
 The pipeline is highly configurable. `./conf/` folder has configuration files for profiles and parameters.

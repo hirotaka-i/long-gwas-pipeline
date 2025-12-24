@@ -108,7 +108,7 @@ workflow {
             tuple(fileTag, files)
         }
         .combine(CHECK_REFERENCES.out.references_flag)
-        .map{ fileTag, fChunk, references_flag -> tuple(fileTag, fChunk) }
+        .map{ fileTag, chr_pfiles, references_flag -> tuple(fileTag, chr_pfiles) }
         .set{ plink_input_ch }
 
         // Process PLINK files directly to cache

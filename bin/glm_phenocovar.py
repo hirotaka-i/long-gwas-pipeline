@@ -17,10 +17,10 @@ def get_args():
 
 def phenocovar_glm(df, phenoname, covarname):
     # Read and generate covar and pheno files
-    all_data = pd.read_csv(df, sep="\t", engine='c')
-    all_data_filt = all_data.dropna(subset=[phenoname])
-    pheno_file = all_data_filt.loc[:, ["#FID", "IID"] + [phenoname]]
-    covar_file = all_data_filt.loc[:, ["#FID", "IID"] + covarname.split(' ') ]
+    all_data = pd.read_csv(df, sep="\t", engine='c') # take samplelist
+    all_data_filt = all_data.dropna(subset=[phenoname]) # drop NAs for the phenotype
+    pheno_file = all_data_filt.loc[:, ["#FID", "IID"] + [phenoname]] # get pheno file
+    covar_file = all_data_filt.loc[:, ["#FID", "IID"] + covarname.split(' ') ] # get covar file
     
     #Save the data
     pheno_file.to_csv("pheno.tsv", sep="\t", index=False)

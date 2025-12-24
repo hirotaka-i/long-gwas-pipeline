@@ -174,22 +174,20 @@ process GENETICQCPLINK {
   scratch true
   storeDir "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${fileTag}"
   label 'medium'
-  errorStrategy 'ignore'
 
   input:
-    tuple val(fileTag), path(fChunk)
+    tuple val(fileTag), path(chr_pfiles)
   output:
-    tuple path("${fileTag}.psam"), path("${fileTag}.pgen"), path("${fileTag}.pvar"), path("${fileTag}.log"), optional: true, emit: plink_qc_cached
+    tuple path("${fileTag}.psam"), path("${fileTag}.pgen"), path("${fileTag}.pvar"), path("${fileTag}.log"), emit: plink_qc_cached
     tuple val(fileTag), path("${fileTag}.status.txt"), emit: chunk_status
 
   script:
-  def prefix = fChunk[0].getSimpleName()
+  def outputPrefix = "${fileTag}_processed"
 
   """
-  set +e
-  
-  echo "Processing PLINK file: ${fChunk}"
-  echo "Output prefix: ${fileTag}"
+  echo "Processing PLINK file: ${chr_pfiles}"
+  echo "Input prefix: ${fileTag}"
+  echo "Output prefix: ${outputPrefix}"
   echo "Assigned cpus: ${task.cpus}"
   echo "Assigned memory: ${task.memory}"
   
@@ -197,32 +195,37 @@ process GENETICQCPLINK {
 
   process_plink.sh \
     ${task.cpus} \
-    ${prefix} \
+    ${fileTag} \
     ${params.assembly} \
-    ${prefix}
+    ${outputPrefix} \
+    ${params.r2thres}
   
   EXIT_CODE=\$?
   END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
   
-  # Rename output to match chromosome name (fileTag)
-  if [ -f "${prefix}_p1out.pgen" ] && [ -f "${prefix}_p1out.pvar" ] && [ -f "${prefix}_p1out.psam" ]; then
-    mv ${prefix}_p1out.pgen ${fileTag}.pgen
-    mv ${prefix}_p1out.pvar ${fileTag}.pvar
-    mv ${prefix}_p1out.psam ${fileTag}.psam
-    touch ${fileTag}.log
-    
-    VARIANT_COUNT=\$(wc -l < ${fileTag}.pvar | awk '{print \$1-1}')
-    STATUS="SUCCESS"
-    echo "✓ Successfully processed PLINK file with \${VARIANT_COUNT} variants"
-  else
-    VARIANT_COUNT=0
-    STATUS="FAILED"
-    echo "⚠ Warning: PLINK processing produced no variants" >&2
+  # Check if output files were created successfully
+  if [ \$EXIT_CODE -ne 0 ]; then
+    echo "ERROR: process_plink.sh failed with exit code \$EXIT_CODE" >&2
+    echo -e "${fileTag}\t${fileTag}\t${chr_pfiles}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\tFAILED\t0" > ${fileTag}.status.txt
+    exit \$EXIT_CODE
   fi
   
-  echo -e "${fileTag}\t${fileTag}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\t\${STATUS}\t\${VARIANT_COUNT}" > ${fileTag}.status.txt
+  if [ ! -f "${outputPrefix}_p1out.pgen" ] || [ ! -f "${outputPrefix}_p1out.pvar" ] || [ ! -f "${outputPrefix}_p1out.psam" ]; then
+    echo "ERROR: Expected output files not created by process_plink.sh" >&2
+    echo -e "${fileTag}\t${fileTag}\t${chr_pfiles}\t\${START_TIME}\t\${END_TIME}\t1\tFAILED\t0" > ${fileTag}.status.txt
+    exit 1
+  fi
   
-  exit 0
+  # Rename output to match chromosome name (fileTag)
+  mv ${outputPrefix}_p1out.pgen ${fileTag}.pgen
+  mv ${outputPrefix}_p1out.pvar ${fileTag}.pvar
+  mv ${outputPrefix}_p1out.psam ${fileTag}.psam
+  mv ${outputPrefix}_p1out.log ${fileTag}.log 2>/dev/null || touch ${fileTag}.log
+  
+  VARIANT_COUNT=\$(wc -l < ${fileTag}.pvar | awk '{print \$1-1}')
+  echo "✓ Successfully processed PLINK file with \${VARIANT_COUNT} variants"
+  
+  echo -e "${fileTag}\t${fileTag}\t${chr_pfiles}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\tSUCCESS\t\${VARIANT_COUNT}" > ${fileTag}.status.txt
   """
 }
 
@@ -277,18 +280,35 @@ process MERGER_CHRS {
     file mergelist
     path "*"
   output:
-    path ("allchr_${params.analysis_name}_p2in.{bed,fam,bim,pgen,pvar,psam,log}")
+    path ("allchr_${params.analysis_name}_p2in.{pgen,pvar,psam,log}")
 
   script:
     """
     set -x
     cat $mergelist | uniq > tmp_mergefile.txt
-    plink2 --memory ${task.memory.toMega()} \
-      --threads ${task.cpus} \
-      --pmerge-list "tmp_mergefile.txt" \
-      --keep-allele-order \
-      --make-bed \
-      --out "allchr_${params.analysis_name}_p2in"
+    
+    # Check if there's only one chromosome (single line in mergelist)
+    NUM_CHR=\$(wc -l < tmp_mergefile.txt | tr -d ' ')
+    
+    if [ "\$NUM_CHR" -eq 1 ]; then
+      # Only one chromosome - no merge needed, just convert formats
+      CHR_NAME=\$(cat tmp_mergefile.txt)
+      plink2 --pfile "\${CHR_NAME}" \
+        --threads ${task.cpus} \
+        --keep-allele-order \
+        --make-pgen \
+        --sort-vars \
+        --out "allchr_${params.analysis_name}_p2in"
+    else
+      # Multiple chromosomes - merge them
+      plink2 --memory ${task.memory.toMega()} \
+        --threads ${task.cpus} \
+        --pmerge-list "tmp_mergefile.txt" \
+        --keep-allele-order \
+        --make-pgen \
+        --sort-vars \
+        --out "allchr_${params.analysis_name}_p2in"
+    fi
     """
 }
 

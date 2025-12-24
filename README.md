@@ -53,9 +53,9 @@ The pipeline uses a standardized directory structure across all profiles:
 ```
 $STORE_ROOT/
 └── $PROJECT_NAME/
-    ├── genotypes/       # Persistent cache for variant standardized chromosome-level PLINK files
-    ├── analyses/        # Subsequent analysis using the genotypes from above
-    └── work/            # Nextflow work directory (temporary)
+    ├── genotypes/  # Variant standardized chromosome-split PLINK files (Reused across runs)
+    ├── analyses/   # Subsequent analysis using the genotypes from above
+    └── work/       # Nextflow work directory (temporary)
 ```
 
 **Environment variables:**
@@ -101,7 +101,7 @@ example/
 ├── phenotype.lt.tsv   # Example longitudinal phenotype file (continuous)
 └── phenotype.surv.tsv # Example longitudinal phenotype file (survival)
 ```
-**Note**: long-gwas-pipeline can work with PLINK files but VCF is preferred. VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization.
+**Note**: long-gwas-pipeline can work with PLINK files but VCF is preferred. VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization. Plink2 input skips the chunking and merging ended up the slightly different results from the equivalent same vcf input. 
 
 ### Configuration
 The pipeline is highly configurable. `./conf/` folder has configuration files for profiles and parameters.
@@ -213,14 +213,17 @@ nextflow run main.nf -profile standard -params-file params.yml -resume
 rm -rf ${STORE_ROOT}/${PROJECT_NAME}/work/
 ```
 
-#### 2. Persistent Cache (`cache/p1_run_cache/`)
-The pipeline stores processed genetic QC outputs in `${STORE_ROOT}/${PROJECT_NAME}/cache/{genetic_cache}/p1_run_cache etc` for **cross-session reuse**.
+#### 2. Persistent Chromosome Level Standardized Plink Binary Cache (Pipeline-level caching)
+The pipeline stores `GENETICQC` outputs in `${STORE_ROOT}/${PROJECT_NAME}/genotypes/{genotyping_cache_id}` for **cross-session reuse**.
 
-**What is `cache/` directory?**
+**What is this cache?**
 - Stores persistent QC results that survive across different pipeline runs
 - Independent from Nextflow's `-resume` mechanism
-- Location: `${STORE_ROOT}/${PROJECT_NAME}/cache/`
+  - This folder is checked and reused automatically by the pipeline logic in `main.nf` without needing `-resume`
+- Location: `${STORE_ROOT}/${PROJECT_NAME}/genotypes/{genotyping_cache_id}`
 - **Keep this directory** - contains valuable preprocessed genetic data
+
+So if you reprocess the chromosome from the input file, you should delete this directory to avoid conflicts.
 
 **Key difference from `work/`:**
 | Feature | `work/` (Nextflow) | `cache/` (Pipeline) |

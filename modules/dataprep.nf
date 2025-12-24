@@ -233,10 +233,9 @@ process EXPORT_PLINK {
     d_result = pd.merge(d_pheno, d_sample, on='IID', how='inner')
 
     if d_result.shape[0] > 0:
-      # Start with base columns + PCA columns from merged result
-      pca_cols = [col for col in d_result.columns if col.startswith('PC')]
-      d_set = d_result.loc[:, ["#FID", "IID"] + all_phenos + covars + pca_cols].copy()
-      print(f"Including {len(pca_cols)} PCA columns: {pca_cols}")
+      # Only include covariates explicitly specified by user
+      d_set = d_result.loc[:, ["#FID", "IID"] + all_phenos + covars].copy()
+      print(f"Including covariates: {covars}")
       
       # One-hot encode categorical covariates
       if covar_cat:

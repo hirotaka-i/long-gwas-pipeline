@@ -9,6 +9,7 @@ N=$1          # Threads
 INFILE=$2     # Input bfile/pfile prefix (without .bed/.pgen extension)
 ASSEMBLY=$3   # hg19, hg38
 OUTPREFIX=$4  # Output file prefix
+R2THRES=${5:-0.3}  # R2 threshold (default 0.3 if not provided)
 
 # Resources (References always mounted from host)
 RESOURCE_DIR=${RESOURCE_DIR:-/workspace/References}
@@ -35,17 +36,40 @@ echo "[INFO] Processing: ${INFILE} -> ${OUTPREFIX}"
 echo "[INFO] Assembly: ${ASSEMBLY} -> hg38"
 echo "[INFO] Threads: ${N}"
 
-# Step 1: Remove duplicates, keep biallelic SNPs only
+# Step 1: Remove duplicates, keep biallelic SNPs only, MAF>=2, missingness<=10%
 plink2 ${INFMT} "${INFILE}" \
-       --rm-dup force-first \
+       --rm-dup exclude-all \
        --snps-only just-acgt \
        --max-alleles 2 \
+       --mac 2 \
        --make-pgen \
+       --geno 0.1 \
        --threads "$N" \
        --out "${OUTPREFIX}_dedup"
 
+# Step 1.5: Filter by R2 if INFO field contains R2 scores
+if grep -q "R2=" "${OUTPREFIX}_dedup.pvar" 2>/dev/null; then
+    echo "[INFO] Filtering variants by R2 >= ${R2THRES}"
+    
+    NUM_BEFORE=$(grep -vc "^#" "${OUTPREFIX}_dedup.pvar" || echo 0)
+    
+    # Use PLINK2's native INFO filtering
+    plink2 --pfile "${OUTPREFIX}_dedup" \
+           --extract-if-info "R2 >= ${R2THRES}" \
+           --make-pgen \
+           --threads "$N" \
+           --out "${OUTPREFIX}_dedup_r2filtered"
+    
+    NUM_AFTER=$(grep -vc "^#" "${OUTPREFIX}_dedup_r2filtered.pvar" || echo 0)
+    echo "[INFO] R2 filter: ${NUM_BEFORE} -> ${NUM_AFTER} variants (removed: $((NUM_BEFORE - NUM_AFTER)))"
+    
+    WORKPFX="${OUTPREFIX}_dedup_r2filtered"
+else
+    echo "[INFO] No R2 information found in pvar file, skipping R2 filter"
+    WORKPFX="${OUTPREFIX}_dedup"
+fi
+
 # Step 2: Liftover if needed
-WORKPFX="${OUTPREFIX}_dedup"
 if [[ "$ASSEMBLY" != "hg38" ]]; then
     echo "[INFO] Lifting from ${ASSEMBLY} to hg38"
     [[ -f "$CHAIN_TO38" ]] || { echo "ERROR: Chain file not found: $CHAIN_TO38" >&2; exit 1; }
@@ -93,8 +117,8 @@ if [[ "$ASSEMBLY" != "hg38" ]]; then
     echo "[INFO] Liftover: $(wc -l < "${OUTPREFIX}_lift.in.bed") -> $(wc -l < "${OUTPREFIX}_lift.unique.bed")"
 else
     echo "[INFO] Input already hg38, ensuring chr prefix"
-    # Add chr prefix if not present
-    awk 'NR==1 {print; next} $1 !~ /^chr/ {print $1, "chr"$1; next} {print $1, $1}' \
+    # Add chr prefix if not present (variant_ID, new_chr)
+    awk 'BEGIN{OFS="\t"} /^#/ {next} $1 !~ /^chr/ {print $3, "chr"$1; next} {print $3, $1}' \
         "$WORKPFX.pvar" > "${OUTPREFIX}_chr_update.txt"
     plink2 --pfile "$WORKPFX" \
            --update-chr "${OUTPREFIX}_chr_update.txt" 2 1 \
@@ -110,7 +134,7 @@ echo "[INFO] Normalizing variants (left-align)"
 plink2 --pfile "$WORKPFX" \
        --fa "$FA_HG38" \
        --normalize \
-       --rm-dup force-first \
+       --rm-dup exclude-all \
        --sort-vars \
        --make-pgen \
        --threads "$N" \
@@ -129,7 +153,7 @@ plink2 --pfile "${OUTPREFIX}_norm" \
 plink2 --pfile "${OUTPREFIX}_refalign" \
        --set-all-var-ids 'chr@:#:$r:$a' \
        --new-id-max-allele-len 999 truncate \
-       --rm-dup force-first \
+       --rm-dup exclude-all \
        --chr 1-22,X,Y \
        --make-pgen \
        --threads "$N" \
@@ -139,6 +163,7 @@ echo "[INFO] Complete: ${OUTPREFIX}_p1out.{pgen,pvar,psam}"
 
 # Cleanup intermediate files
 rm -f "${OUTPREFIX}_dedup".{pgen,pvar,psam,log} \
+      "${OUTPREFIX}_dedup_r2filtered".{pgen,pvar,psam,log} \
       "${OUTPREFIX}_named".{pgen,pvar,psam,log} \
       "${OUTPREFIX}_hg38".{pgen,pvar,psam,log} \
       "${OUTPREFIX}_refalign".{pgen,pvar,psam,log} \

@@ -75,10 +75,11 @@ process GWASGLM {
         
         # Reorganize results: ADD as base, join interaction and 2DF columns
         # Use awk to dynamically find columns and reshape data
+        INTERACT_TEST="ADDx${params.covar_interact}"
         for glm_file in ${outfile}_all_vars.${phenoname}.glm.{linear,logistic.hybrid}; do
             if [ -f "\${glm_file}" ]; then
                 output_file=\${glm_file/_all_vars/}
-                awk 'BEGIN{FS="\t"; OFS="\t"} 
+                awk -v interact_test="\${INTERACT_TEST}" 'BEGIN{FS="\t"; OFS="\t"} 
                      NR==1 {
                          # Find column indices
                          for(i=1;i<=NF;i++) {
@@ -99,8 +100,8 @@ process GWASGLM {
                          if(test == "ADD") {
                              # Store base ADD row
                              add[id] = \$0;
-                         } else if(test ~ /^ADDx/) {
-                             # Store interaction columns
+                         } else if(test == interact_test) {
+                             # Store interaction columns for specific interaction term
                              interact_beta[id] = \$betacol;
                              interact_se[id] = \$secol;
                              interact_p[id] = \$pcol;

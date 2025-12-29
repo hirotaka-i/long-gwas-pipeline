@@ -272,15 +272,16 @@ process MERGER_CHUNKS {
 
 process MERGER_CHRS {
   scratch true
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/merged_genotypes", mode: 'copy', overwrite: true, pattern: "*.{pgen,pvar,psam}"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/logs/merge_all", mode: 'copy', overwrite: true, pattern: "*.log"
+  cache 'deep'
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/merged_genotypes", mode: 'copy', overwrite: true, pattern: "*.{pgen,pvar,psam}"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/merge_all", mode: 'copy', overwrite: true, pattern: "*.log"
   label 'large'
 
   input:
     file mergelist
     path "*"
   output:
-    path ("allchr_${params.analysis_name}_p2in.{pgen,pvar,psam,log}")
+    path ("allchr_merged.{pgen,pvar,psam,log}")
 
   script:
     """
@@ -298,7 +299,7 @@ process MERGER_CHRS {
         --keep-allele-order \
         --make-pgen \
         --sort-vars \
-        --out "allchr_${params.analysis_name}_p2in"
+        --out "allchr_merged"
     else
       # Multiple chromosomes - merge them
       plink2 --memory ${task.memory.toMega()} \
@@ -307,7 +308,7 @@ process MERGER_CHRS {
         --keep-allele-order \
         --make-pgen \
         --sort-vars \
-        --out "allchr_${params.analysis_name}_p2in"
+        --out "allchr_merged"
     fi
     """
 }
@@ -346,8 +347,9 @@ process LD_PRUNE_CHR {
 
 /* Simple QC without ancestry inference (for skip population splitting mode) */
 process SIMPLE_QC {
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.{h5,txt}"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.png"
+  cache 'deep'
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.{h5,txt}"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.png"
   label 'large'
   
   input:
@@ -362,7 +364,7 @@ process SIMPLE_QC {
     set +x
     
     simple_qc.sh \
-      "allchr_${params.analysis_name}_p2in" \
+      "allchr_merged" \
       "${params.kinship}" \
       "${params.ancestry}_samplelist_p2out" \
       ${task.cpus}
@@ -370,8 +372,8 @@ process SIMPLE_QC {
 }
 
 process GWASQC {
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.h5"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.h5"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
   label 'large'
   
   input:
@@ -385,7 +387,7 @@ process GWASQC {
     set +x
     
     addi_qc_pipeline.py \
-      --geno "allchr_${params.analysis_name}_p2in" \
+      --geno "allchr_merged" \
       --ref "/srv/GWAS-Pipeline/References/ref_panel/1kg_ashkj_ref_panel_gp2_pruned_hg38_newids" \
       --ref_labels "/srv/GWAS-Pipeline/References/ref_panel/ancestry_ref_labels.txt" \
       --pop "${params.ancestry}" \

@@ -146,6 +146,7 @@ cython_debug/
 temp/
 files/
 example/genotype/example.vcf/
+example/flowchart/
 .nextflow/
 work/
 Docker
@@ -158,6 +159,5 @@ report-*.html
 timeline-*.html 
 trace-*.txt
 .nextflow.log*
-z_*
 test*
 project*/

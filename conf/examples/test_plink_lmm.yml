@@ -40,8 +40,7 @@ assembly: "hg19"  # Set to hg38 to skip liftover (test data is hg19, will be tre
 skip_pop_split: true
 
 # Dataset identifier
-analysis_name: "TEST_PLINK_LMM_CHR20_22"
-genetic_data_id: "GEN_PLINK_CHR20_22" 
+analysis_name: "TEST_PLINK_LMM"
 
 # Visualization
-mh_plot: true
+mh_plot: false

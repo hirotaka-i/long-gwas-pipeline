@@ -118,7 +118,7 @@ workflow {
         GENETICQCPLINK.out.chunk_status
             .map{ fileTag, statusFile -> statusFile.text }
             .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
-                         storeDir: "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/logs/",
+                         storeDir: "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/",
                          seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
                          newLine: false)
         
@@ -154,7 +154,7 @@ workflow {
         GENETICQC.out.chunk_status
             .map{ fileTag, chunkId, statusFile -> statusFile.text }
             .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
-                         storeDir: "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/logs/",
+                         storeDir: "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/",
                          seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
                          newLine: false)
 

@@ -53,7 +53,7 @@ process COMPUTE_PCA {
     plink2 \
           --indep-pairwise 50 .2 \
           --maf ${params.minor_allele_freq} \
-          --pfile "allchr_${params.analysis_name}_p2in" \
+          --pfile "allchr_merged" \
           --out ${study_arm}.ld
 
     plink2 \
@@ -63,7 +63,7 @@ process COMPUTE_PCA {
           --pca 10 \
           --threads ${task.cpus} \
           --memory ${task.memory.toMega()} \
-          --pfile "allchr_${params.analysis_name}_p2in"
+          --pfile "allchr_merged"
     """
 }
 
@@ -99,50 +99,6 @@ process MERGE_PCA {
      samples_df.to_csv(study_arm + '_filtered.pca.tsv', sep="\\t", index=False)
      time.sleep(5)
      """
-}
-
-process GALLOPCOX_INPUT {
-  scratch true
-  label 'small'
-  
-  input:
-    tuple val(fileTag), path(plink_input)
-  output:
-    tuple val(fileTag), path("allchr_${params.analysis_name}_p2in.txt")
-  
-  script:
-    """
-    #!/usr/bin/env python3
-    fn = "${plink_input}"
-    out_fn = "allchr_${params.analysis_name}_p2in.txt"
-    count = 0
-    id_pairs = []
-    start, end =  None,None
-    with open(fn, 'r') as f:
-      for l in iter(f.readline, ''):
-        if l[0] == '#':
-          continue
-        data = l.strip().split('\\t')
-        vid = data[2]
-        count += 1
-        if start is None:
-          start = vid
-
-        if count >= ${params.chunk_size}:
-          end = vid
-          id_pairs.append( (start, end) )
-          start = None
-          end = None
-          count = 0
-
-    if count > 0:
-      end = vid
-      id_pairs.append( (start, end) )
-
-    with open(out_fn, 'w') as f:
-      for start,end in id_pairs:
-        f.write( '\\t'.join([start,end]) + '\\n' )
-    """
 }
 
 process RAWFILE_EXPORT {

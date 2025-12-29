@@ -53,14 +53,47 @@ The pipeline uses a standardized directory structure across all profiles:
 ```
 $STORE_ROOT/
 └── $PROJECT_NAME/
-    ├── genotypes/  # Variant standardized chromosome-split PLINK files (Reused across runs)
-    ├── analyses/   # Subsequent analysis using the genotypes from above
-    └── work/       # Nextflow work directory (temporary)
+    ├── genotypes/
+    │   └── ${genetic_cache_key}/        # e.g., vcf_EUR_hg38_maf0.05_kin0.177_skip
+    │       └── chromosomes/             # Chromosome-level standardized PLINK2 binaries
+    │           ├── chr1.pgen/pvar/psam  # Reused across all analyses with same genetic parameters
+    │           ├── chr2.pgen/pvar/psam
+    │           └── ...
+    │
+    ├── analyses/
+    │   └── ${genetic_cache_key}/        # Genetic_cache_key for the genetic input used
+    │       ├── genetic_qc/              # Shared across analyses with same genetics
+    │       │   ├── allchr_merged.*      # Chromosome-merged PLINK files
+    │       │   ├── simple_qc.h5         # Sample QC results
+    │       │   └── logs/                # Genetic QC logs
+    │       │
+    │       └── ${analysis_name}/        # From YAML params file (e.g., pheno1_glm)
+    │           ├── data_prep/           # Analysis-specific data preparation
+    │           │   ├── pca/
+    │           │   ├── analysis_sets/
+    │           │   └── exported_files/
+    │           ├── gwas/                # GWAS results
+    │           │   ├── glm/             # or gallop/ or cph/
+    │           │   └── manhattan_plots/
+    │           └── logs/                # Analysis-specific logs
+    │
+    └── work/                            # Nextflow work directory (temporary)
 ```
+
+**Directory hierarchy:**
+- `genotypes/${genetic_cache_key}/chromosomes/`: Chromosome-level QC outputs (permanent cache via storeDir)
+- `analyses/${genetic_cache_key}/genetic_qc/`: Merged genetic QC shared across analyses (cache 'deep')
+- `analyses/${genetic_cache_key}/${analysis_name}/`: Analysis-specific outputs (phenotype/model specific)
 
 **Environment variables:**
 - `STORE_ROOT`: Root directory for all pipeline data - can be local path or GCS bucket (default: `$PWD`)
 - `PROJECT_NAME`: Unique identifier for your project (default: `unnamed_project`)
+
+**Cache key components:**
+- `genetic_cache_key` = `${format}_${ancestry}_${assembly}_maf${MAF}_kin${kinship}${skip_suffix}`
+  - `format`: vcf, pgen, or bed (input file type)
+  - Example: `vcf_EUR_hg38_maf0.05_kin0.177_skip`
+- `analysis_name`: From your YAML params file (default: `unnamed_analysis`)
 
 ### Reference Folder Setup
 
@@ -190,97 +223,69 @@ nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-fil
 
 ### More about Caching and Resume Behavior
 
-The pipeline uses **two complementary caching strategies** that serve different purposes:
+The pipeline uses **three complementary caching mechanisms**:
 
-#### 1. Nextflow `-resume` (Task-level caching)
-Nextflow automatically caches completed tasks in the `work/` directory. Use `-resume` to skip successfully completed steps after a failure:
+#### 1. Nextflow `-resume` (work directory caching)
+Standard Nextflow caching for resuming failed runs:
 
 ```bash
 nextflow run main.nf -profile standard -params-file params.yml -resume
 ```
 
-**What is `work/` directory?**
-- Stores temporary task execution files (intermediate files, scripts, logs)
-- Used by Nextflow's built-in resume mechanism
-- Location: `${STORE_ROOT}/${PROJECT_NAME}/work/`
+- **Location**: `${STORE_ROOT}/${PROJECT_NAME}/work/`
+- **Purpose**: Resume interrupted runs from point of failure
+- **Behavior**: Skips completed tasks, re-runs only failed/incomplete tasks
+- **Cleanup**: Safe to delete after successful completion to save disk space
 
-**How it works:**
-- Only **failed or incomplete** tasks are re-run
-- **Successful parallel tasks are skipped** (e.g., if chr17 and chr18 succeeded but chr19 failed, only chr19 re-runs)
-- Cache persists until manually deleted
-- **Limitation:** Cache is invalidated if you change input files, parameters, or code
+#### 2. storeDir (persistent chromosome cache)
+Chromosome-level PLINK files are permanently stored for cross-session reuse:
 
-**Cleanup:**
+- **Location**: `${STORE_ROOT}/${PROJECT_NAME}/genotypes/${genetic_cache_key}/chromosomes/`
+- **Purpose**: Avoid re-processing expensive per-chromosome QC across different runs
+- **Behavior**: 
+  - If chromosome files exist, processing is **skipped entirely** (no execution)
+  - Works **independently of `-resume`** - checked by pipeline logic in `main.nf`
+  - Survives even after deleting work directory
+- **Cache key includes**: input format (vcf/pgen/bed), ancestry, assembly, MAF, kinship, skip_pop_split
+- **Cleanup**: Only delete if you need to reprocess chromosomes from source files
+
+**Example - cumulative genome-wide analysis:**
 ```bash
-# Safe to delete after successful run to save space
-rm -rf ${STORE_ROOT}/${PROJECT_NAME}/work/
-```
-
-#### 2. Persistent Chromosome Level Standardized Plink Binary Cache (Pipeline-level caching)
-The pipeline stores `GENETICQC` outputs in `${STORE_ROOT}/${PROJECT_NAME}/genotypes/{genotyping_cache_id}` for **cross-session reuse**.
-
-**What is this cache?**
-- Stores persistent QC results that survive across different pipeline runs
-- Independent from Nextflow's `-resume` mechanism
-  - This folder is checked and reused automatically by the pipeline logic in `main.nf` without needing `-resume`
-- Location: `${STORE_ROOT}/${PROJECT_NAME}/genotypes/{genotyping_cache_id}`
-- **Keep this directory** - contains valuable preprocessed genetic data
-
-So if you reprocess the chromosome from the input file, you should delete this directory to avoid conflicts.
-
-**Key difference from `work/`:**
-| Feature | `work/` (Nextflow) | `cache/` (Pipeline) |
-|---------|-------------------|---------------------|
-| **Purpose** | Resume failed runs | Reuse QC across runs |
-| **Checked by** | `-resume` flag | Pipeline logic (main.nf) |
-| **Lifetime** | Single run session | Multiple runs |
-| **Safe to delete** | Yes (after success) | No (loses QC data) |
-
-**Current behavior (cumulative mode):**
-```bash
-# First run: Process chr1-3
-export PROJECT_NAME="genome_wide_study"
+# Run 1: Process chr1-3
 input: "genotype/chr{1,2,3}.vcf"
-# → Outputs saved to cache/p1_run_cache/
-# → Final analysis includes: chr1, chr2, chr3
+# → Saved to genotypes/vcf_EUR_hg38_maf0.05_kin0.177/chromosomes/
 
-# Second run: Process chr17-19 (same PROJECT_NAME)
+# Run 2: Process chr17-19 (same genetic_cache_key)
 input: "genotype/chr{17,18,19}.vcf"
-# → chr1-3 automatically loaded from cache
+# → chr1-3 loaded from storeDir (no re-processing)
 # → chr17-19 newly processed
-# → Final analysis includes: chr1, chr2, chr3, chr17, chr18, chr19 (all 6)
+# → Analysis includes ALL 6 chromosomes (chr1-3 + chr17-19)
 ```
 
-**Why this happens:**
-The pipeline concatenates ALL cached files with newly processed files (see `main.nf` line ~168: `.concat(cache)`). This enables **incremental genome-wide analysis** where each run builds on previous chromosomes.
+#### 3. publishDir + cache 'deep' (merged QC results)
+Merged/aggregated results reuse based on **content**, not paths:
 
-**Practical example:**
-```bash
-# Scenario 1: Pipeline fails mid-run
-nextflow run main.nf -profile gcb -params-file params.yml
-# ... fails at step 5/10
-nextflow run main.nf -profile gcb -params-file params.yml -resume  
-# → Resumes from step 5 using work/ directory
+- **Location**: `${STORE_ROOT}/${PROJECT_NAME}/analyses/${genetic_cache_key}/genetic_qc/`
+- **Purpose**: Cache merged chromosome results (MERGER_CHRS, SIMPLE_QC) across analyses with different phenotypes
+- **Behavior**:
+  - Uses Nextflow's `cache 'deep'` to hash file **contents**, not paths
+  - Reuses results when same genetic data processed, even with different `analysis_name`
+  - Example: survival analysis and cross-sectional analysis share same genetic QC if using same chromosomes
+- **Why not storeDir**: Merged results depend on **which** chromosomes are selected (chr1-22 vs chr21-22), so need flexible work directory caching
 
-# Scenario 2: Fresh run, but reuse previous QC
-rm -rf ${STORE_ROOT}/${PROJECT_NAME}/work/  # Delete temp files
-nextflow run main.nf -profile gcb -params-file params.yml
-# → Fresh Nextflow run (no -resume)
-# → BUT cache/ still has QC data from previous session
-# → Skips expensive QC steps automatically
-```
+**Key distinctions:**
 
-**Important considerations:**
-- ✅ **Use cumulative mode** if you're building a complete genome-wide dataset over multiple runs
-- ⚠️ **Beware** if you want to analyze only specific chromosomes in isolation:
-  - Cached chromosomes from previous runs will be included in downstream analyses (PCA, GWAS, results)
-  - To analyze chr17-19 only, use a different `PROJECT_NAME` or manually remove cache files
-- 💡 **Tip:** Use different `PROJECT_NAME` values for different chromosome sets to maintain separate caches
+| Mechanism | Location | Persists after `work/` cleanup? | Reused across analyses? | When to clear |
+|-----------|----------|--------------------------------|------------------------|---------------|
+| **work/ + `-resume`** | `work/` | ❌ No | ❌ No | After successful run |
+| **storeDir** | `genotypes/.../chromosomes/` | ✅ Yes | ✅ Yes | When reprocessing source chromosomes |
+| **publishDir + cache 'deep'** | `analyses/.../genetic_qc/` | ❌ No (but republished) | ✅ Yes (via cache) | When changing QC parameters |
 
 **Best practices:**
-- Always use `-resume` for failure recovery
-- Use unique `PROJECT_NAME` values for different analyses to avoid cache conflicts
-- Clear cache if you want a fresh start: `rm -rf ${LONG_GWAS_DIR}/${PROJECT_NAME}/cache/p1_run_cache/`
+- Use `-resume` to recover from failures
+- Keep `genotypes/` directory - contains expensive chromosome-level QC
+- Different chromosome sets? Use different `genetic_cache_key` (set via `genetic_data_id` parameter)
+- Same genetics, different phenotypes? Pipeline automatically shares genetic QC via `cache 'deep'`
 
 ## Troubleshooting
 

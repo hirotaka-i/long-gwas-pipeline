@@ -36,4 +36,4 @@ skip_pop_split: false
 analysis_name: "TEST_CS"
 
 # Visualization
-mh_plot: true
+mh_plot: false

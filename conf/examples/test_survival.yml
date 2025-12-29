@@ -9,7 +9,7 @@ phenofile: "${projectDir}/example/phenotype.surv.tsv"
 
 # Variable names in covariate/phenotype files
 pheno_name: "surv_y"
-covariates: "SEX age_at_baseline"
+covariates: "SEX age_at_baseline PC1 PC2 PC3 PC4 PC5"
 study_arm_col: "study_arm"
 # tstart, tend columns should be included in the phenotype file for survival analysis
 

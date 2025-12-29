@@ -197,7 +197,7 @@ process GWASGALLOP {
 
 process GWASCPH {
   scratch true
-  label 'medium'
+  label 'small'
 
   input:
     tuple val(fileTag), path(samplelist), path(rawfile)

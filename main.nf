@@ -45,7 +45,7 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
  * Import consolidated modules
  */
 include { CHECK_REFERENCES; GENETICQC; GENETICQCPLINK; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
-include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; GALLOPCOX_INPUT; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
+include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
 
@@ -190,14 +190,6 @@ workflow {
             .groupTuple(by: 0)
             .set{ gallop_plink_input }
 
-        chrsqced
-            .groupTuple(by: 0)
-            .map{ fileTag, files -> 
-                def pvarFile = files.find{ it.name.endsWith('.pvar') }
-                tuple(fileTag, pvarFile)
-            }
-            .set{ gallopcph_chunks }
-
         // For QC/PCA: merge pruned chromosomes
         chrsqced_pruned
             .map{ fileTag, f -> fileTag }
@@ -228,14 +220,6 @@ workflow {
         chrsqced
             .groupTuple(by: 0)
             .set{ gallop_plink_input }
-
-        chrsqced
-            .groupTuple(by: 0)
-            .map{ fileTag, files -> 
-                def pvarFile = files.find{ it.name.endsWith('.pvar') }
-                tuple(fileTag, pvarFile)
-            }
-            .set{ gallopcph_chunks }
 
         // Merge all chromosomes
         chrsqced
@@ -270,26 +254,14 @@ workflow {
     // Branch based on analysis type
     if (params.longitudinal_flag | params.survival_flag) {
         // For longitudinal/survival: chunk variants and export to raw format
-        GALLOPCOX_INPUT(gallopcph_chunks)
-
-        // Combine PLINK files with variant chunks
-        // Extract individual files from grouped PLINK files: (log, pgen, psam, pvar)
-        gallop_plink_input
-            .map{ fileTag, plinkFiles -> 
-                def plog = plinkFiles.find{ it.name.endsWith('.log') }
-                def pgen = plinkFiles.find{ it.name.endsWith('.pgen') }
-                def psam = plinkFiles.find{ it.name.endsWith('.psam') }
-                def pvar = plinkFiles.find{ it.name.endsWith('.pvar') }
-                tuple(fileTag, plog, pgen, psam, pvar)
-            }
-            .combine(GALLOPCOX_INPUT.out.splitText(file: true), by: 0)
-            .map{ fileTag, plog, pgen, psam, pvar, lineFile ->
-                tuple(fileTag, plog, pgen, psam, pvar, lineFile)
-            }
-            .set{ GALLOPCPHCHUNKS }
-
-        RAWFILE_EXPORT(GALLOPCPHCHUNKS, MERGE_PCA.out)
-        CHUNKS = RAWFILE_EXPORT.out.gwas_rawfile
+        // RAWFILE_EXPORT now handles both chunking and export internally
+        RAWFILE_EXPORT(gallop_plink_input, MERGE_PCA.out)
+        
+        // Flatten to process each raw file individually
+        RAWFILE_EXPORT.out.gwas_rawfile
+            .transpose()
+            .set{ CHUNKS }
+        
         PLINK_SAMPLE_LIST = Channel.empty()
 
     } else {

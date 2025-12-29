@@ -173,7 +173,7 @@ process GENETICQC {
 process GENETICQCPLINK {
   scratch true
   storeDir "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${fileTag}"
-  label 'medium'
+  label 'two_cpu_large_mem'
 
   input:
     tuple val(fileTag), path(chr_pfiles)
@@ -231,7 +231,7 @@ process GENETICQCPLINK {
 
 process MERGER_CHUNKS {
   scratch true
-  label 'large_mem'
+  label 'large'
   storeDir { "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${mergelist.getSimpleName()}" }
 
   input:
@@ -274,7 +274,7 @@ process MERGER_CHRS {
   scratch true
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/merged_genotypes", mode: 'copy', overwrite: true, pattern: "*.{pgen,pvar,psam}"
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/logs/merge_all", mode: 'copy', overwrite: true, pattern: "*.log"
-  label 'large_mem'
+  label 'large'
 
   input:
     file mergelist
@@ -315,7 +315,7 @@ process MERGER_CHRS {
 /* LD Prune per chromosome (for skip population splitting mode) */
 process LD_PRUNE_CHR {
   scratch true
-  label 'medium'
+  label 'small'
 
   input:
     tuple path(psam), path(pgen), path(pvar), path(log)
@@ -348,7 +348,7 @@ process LD_PRUNE_CHR {
 process SIMPLE_QC {
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.{h5,txt}"
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.png"
-  label 'large_mem'
+  label 'large'
   
   input:
     path "*" 
@@ -372,7 +372,7 @@ process SIMPLE_QC {
 process GWASQC {
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.h5"
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
-  label 'large_mem'
+  label 'large'
   
   input:
     path "*" 

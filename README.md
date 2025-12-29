@@ -159,6 +159,7 @@ nextflow run main.nf -profile biowulf -params-file conf/examples/test_survival.y
 nextflow run main.nf -profile biowulflocal -params-file conf/examples/test_survival.yml
 ```
 
+
 ### Verily Workbench / Google Cloud Batch
 For verily Workbench, first create a GCS bucket to store your data. Then run the following commands from within the Verily Workbench VM. You would need to get a Tower access token from https://cloud.seqera.io/tokens to monitor your runs on Seqera Tower.
 ```bash

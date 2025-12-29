@@ -160,3 +160,4 @@ trace-*.txt
 .nextflow.log*
 z_*
 test*
+project*/

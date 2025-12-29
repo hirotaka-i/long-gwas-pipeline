@@ -13,7 +13,7 @@ process GWASGLM {
 
   input:
     tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar)
-    each samplelist
+    each path(samplelist)
     each phenoname
 
   output:
@@ -221,6 +221,10 @@ process GWASCPH {
     """
     set -x
     KEY="${pop_pheno}_${phenoname}"
+    
+    echo "Processing: ${rawfile.name}"
+    echo "Available files:"
+    ls -la *.raw *.tsv 2>/dev/null || echo "No files found"
     
     survival.R --rawfile ${rawfile} \
                --pheno "phenotypes.tsv" \

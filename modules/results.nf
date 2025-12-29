@@ -8,6 +8,7 @@
 
 process SAVEGWAS {
   scratch true
+  label 'two_cpu_large_mem'
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}", mode: 'copy', overwrite: true
 
   input:

@@ -18,6 +18,8 @@ option_list <- list(
                  help="covariate to test for interaction with SNP (must be numeric)"),
   make_option( c("--pheno-name"), type="character", default="y",
                  help="phenotype / outcome column name"),
+  make_option( c("--time-col"), type="character", default="study_days",
+                 help="time column name for generating tstart/tend if not provided"),
   make_option( c("--out"), type="character", 
                  default="survival.tbl",
                  help="output file")
@@ -62,6 +64,22 @@ offset_col = 7 # offset for rawfile format
 
 print('finished loading data')
 data.merged = merge(data.covar, data.pheno)
+
+# Generate tstart and tend from time_col if they don't exist
+if (!('tstart' %in% colnames(data.merged)) && !('tend' %in% colnames(data.merged))) {
+  time_col <- opt[['time-col']]
+  if (!(time_col %in% colnames(data.merged))) {
+    stop(paste("Error: time column '", time_col, "' not found in phenotype data. ",
+               "Either provide tstart/tend columns or ensure '", time_col, "' exists.", sep=""))
+  }
+  print(paste("Generating tstart=0 and tend from time column:", time_col))
+  data.merged$tstart <- 0
+  data.merged$tend <- data.merged[[time_col]]
+} else if (!('tstart' %in% colnames(data.merged)) || !('tend' %in% colnames(data.merged))) {
+  stop("Error: Both tstart and tend columns must be present, or neither (to auto-generate from time_col)")
+} else {
+  print("Using existing tstart and tend columns from phenotype data")
+}
 
 # Convert categorical covariates to factors
 if (length(input.categorical) > 0) {

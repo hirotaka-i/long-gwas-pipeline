@@ -233,6 +233,7 @@ process GWASCPH {
                --covar-categorical "${params.covar_categorical}" \
                ${params.covar_interact ? "--covar-interact \"${params.covar_interact}\"" : ""} \
                --pheno-name "${phenoname}" \
+               --time-col "${params.time_col}" \
                --out ${outfile}
     """
 }

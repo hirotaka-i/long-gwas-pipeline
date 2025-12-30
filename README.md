@@ -216,10 +216,16 @@ nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-fil
 
 
 
-## TIPS
+### TIPS
 * `-resume` flag can be used to resume failed runs. Data modifications and model changes can reuse the cached qced-genetics.
 * `-with-dag flowchart.png` will also creates workflow DAG diagram in `flowchart.png`. 
 * `-with-tower` flag can be used to monitor runs on Seqera Tower.
+* `${projectDir}` points where the main.nf is located. **Relative paths don't work**
+* Files to check after running.
+  * N of input: `genotypes/${genetic_cache_key}/chromosomes/chr*/*.psam`
+  * N of sample_qc: `analyses/${genetic_cache_key}/genetic_qc/sample_qc/*_samplelist_p2out_qc_summary.txt`
+  * Analysis sets: `analyses/${genetic_cache_key}/${analysis_name}/prepared_data/*_all.tsv`
+
 
 ### More about Caching and Resume Behavior
 
@@ -251,27 +257,29 @@ Chromosome-level PLINK files are permanently stored for cross-session reuse:
 
 **Example - cumulative genome-wide analysis:**
 ```bash
-# Run 1: Process chr1-3
-input: "genotype/chr{1,2,3}.vcf"
+# Run 1: Process chr21-22 for testing
+input: "genotype/chr{21,22}.vcf"
 # → Saved to genotypes/vcf_EUR_hg38_maf0.05_kin0.177/chromosomes/
 
 # Run 2: Process chr17-19 (same genetic_cache_key)
 input: "genotype/chr{17,18,19}.vcf"
-# → chr1-3 loaded from storeDir (no re-processing)
+# → chr21-22 loaded from storeDir (no re-processing)
 # → chr17-19 newly processed
-# → Analysis includes ALL 6 chromosomes (chr1-3 + chr17-19)
+# → Analysis includes ALL 6 chromosomes (chr21-22 + chr17-19)
 ```
 
 #### 3. publishDir + cache 'deep' (merged QC results)
 Merged/aggregated results reuse based on **content**, not paths:
 
 - **Location**: `${STORE_ROOT}/${PROJECT_NAME}/analyses/${genetic_cache_key}/genetic_qc/`
-- **Purpose**: Cache merged chromosome results (MERGER_CHRS, SIMPLE_QC) across analyses with different phenotypes
-- **Behavior**:
+- **Purpose**: Merged chromosome results (MERGER_CHRS, SIMPLE_QC) across analyses with different phenotypes
+- **Behavior of `deep` Cache**:
   - Uses Nextflow's `cache 'deep'` to hash file **contents**, not paths
   - Reuses results when same genetic data processed, even with different `analysis_name`
   - Example: survival analysis and cross-sectional analysis share same genetic QC if using same chromosomes
+  - `publishDir` just has data but not cache. Cache is lost when `work/` is deleted.
 - **Why not storeDir**: Merged results depend on **which** chromosomes are selected (chr1-22 vs chr21-22), so need flexible work directory caching
+
 
 **Key distinctions:**
 
@@ -290,8 +298,8 @@ Merged/aggregated results reuse based on **content**, not paths:
 ## Troubleshooting
 
 If the pipeline fails, check the following:
-- `.nextflow.log` for general errors
-- Review Nextflow logs in `work/` directory for error details of the failed process.
+- `.nextflow.log` for general errors. reports (html) are also useful. 
+- Check the failed process ID, and review Nextflow logs in `work/` directory for error details.
 
 ## Support
 

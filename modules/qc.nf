@@ -316,6 +316,7 @@ process MERGER_CHRS {
 
 /* LD Prune per chromosome (for skip population splitting mode) */
 process LD_PRUNE_CHR {
+  cache 'deep'
   scratch true
   label 'small'
 

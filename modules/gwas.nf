@@ -12,8 +12,7 @@ process GWASGLM {
   label 'medium'
 
   input:
-    tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar)
-    tuple val(study_arm), path(samplelist), path(covar_names_file), path(n_covar_file)
+    tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar), val(study_arm), path(samplelist), path(covar_names_file), path(n_covar_file)
     val phenonames
 
   output:

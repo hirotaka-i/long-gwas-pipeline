@@ -303,11 +303,14 @@ workflow {
             }
             .set{ PLINK_SAMPLE_LIST }
         
-        // Unpack PLINK files for GLM - convert from [fileTag, [files]] to [fileTag, file1, file2, file3, file4]
+        // For GLM: use gallop_plink_input (already grouped per chromosome)
+        // Unpack PLINK files: convert from [fileTag, [files]] to [fileTag, log, pgen, pvar, psam]
+        // Then combine each chunk with PLINK_SAMPLE_LIST (1 sample list applies to all 22 chromosomes)
         gallop_plink_input
             .map{ fileTag, plinkFiles -> 
                 tuple(fileTag, plinkFiles[0], plinkFiles[1], plinkFiles[2], plinkFiles[3])
             }
+            .combine(PLINK_SAMPLE_LIST)
             .set{ CHUNKS }
     }
 
@@ -322,18 +325,21 @@ workflow {
         GWASCPH(CHUNKS, params.phenofile, phenonames)
         GWASRES = GWASCPH.out
     } else {
-        GWASGLM(CHUNKS, PLINK_SAMPLE_LIST, phenonames)
+        GWASGLM(CHUNKS, phenonames)
         
-        // Parse phenotype from filename and create tuples for grouping
-        // Filenames are like: EUR_chr20.phenoname.results
+        // Parse study_arm and phenotype from filename to create proper key
+        // Filenames are like: EUR_0_chr10_EUR_REGARDS_MARCH_2025.ICI.results
+        // Need to extract study_arm (EUR_0) and phenotype (ICI) to match GWASCPH format
         GWASGLM.out
             .flatten()
             .map{ file ->
-                // Extract phenotype name from filename pattern: study_arm_chr.phenoname.results
-                def matcher = file.name =~ /.*\.([^\.]+)\.results$/
+                // Pattern: study_arm_chrN_*.phenoname.results
+                def matcher = file.name =~ /^([^_]+_\d+)_chr\d+.*\.([^\.]+)\.results$/
                 if (matcher.find()) {
-                    def pheno = matcher[0][1]
-                    return tuple(pheno, file)
+                    def study_arm = matcher[0][1]  // e.g., EUR_0
+                    def pheno = matcher[0][2]       // e.g., ICI
+                    def key = "${study_arm}_${pheno}"  // e.g., EUR_0_ICI
+                    return tuple(key, file)
                 }
                 return null
             }

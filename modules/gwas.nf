@@ -13,44 +13,32 @@ process GWASGLM {
 
   input:
     tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar)
-    each path(samplelist)
-    each phenoname
+    tuple val(study_arm), path(samplelist), path(covar_names_file), path(n_covar_file)
+    val phenonames
 
   output:
-    tuple env(KEY), path("*.results")
+    path "*.results"
 
   script:
-    def m = []
-    def study_arm = samplelist.getName()
-    m = study_arm =~ /(.*)_filtered\.pca\.pheno\.tsv/
-    study_arm = m[0][1]
     def outfile = "${study_arm}_${fileTag}"
+    // Convert phenonames to space-separated string for plink2
+    // Handle both String and List input formats
+    def pheno_list = phenonames instanceof List ? phenonames.join(' ') : phenonames.toString().replaceAll(/[\[\]'"]/, '').trim()
 
     """
     set -x
-    KEY="${study_arm}_${phenoname}"
 
-    # Extract all covariate column names from the analyzed file (excluding #FID, IID, and phenotype)
-    awk 'NR==1 {first=1; for(i=1;i<=NF;i++){if(\$i!="#FID" && \$i!="IID" && \$i!="${phenoname}") {if(!first) printf ","; printf "%s", \$i; first=0}}} END {print ""}' ${samplelist} > covar_names.txt
-    COVAR_NAMES=\$(cat covar_names.txt)
-
-    # If interaction term is specified, reorder covariates to put interaction covariate first
-    if [ -n "${params.covar_interact}" ]; then
-        # Extract interaction covariate and remaining covariates
-        INTERACT_COVAR="${params.covar_interact}"
-        OTHER_COVARS=\$(echo "\${COVAR_NAMES}" | tr ',' '\n' | grep -v "^\${INTERACT_COVAR}\$" | paste -sd ',' -)
-        COVAR_NAMES="\${INTERACT_COVAR},\${OTHER_COVARS}"
-        
-        # Count total number of covariates
-        N_COVAR=\$(echo "\${COVAR_NAMES}" | tr ',' '\n' | wc -l | tr -d ' ')
-        echo "Interaction analysis: \${INTERACT_COVAR} as first covariate"
-        echo "Total covariates: \${N_COVAR}"
-    fi
-
-    glm_phenocovar.py \
-        --pheno_covar ${samplelist} \
-        --phenname ${phenoname} \
-        --covname "\${COVAR_NAMES//,/ }"
+    # Read pre-computed covariate names and count from EXPORT_PLINK
+    COVAR_NAMES=\$(cat ${covar_names_file})
+    N_COVAR=\$(cat ${n_covar_file})
+    
+    echo "Using covariates: \${COVAR_NAMES}"
+    echo "Total covariates: \${N_COVAR}"
+    echo "Processing phenotypes: ${pheno_list}"
+    
+    # Note: ${samplelist} contains all samples with standardized covariates from EXPORT_PLINK
+    # plink2 --glm automatically excludes samples with missing phenotype values per phenotype
+    # Passing multiple phenotypes is much more efficient than iterating
 
     # Build plink2 command with optional interaction parameters
     if [ -n "${params.covar_interact}" ]; then
@@ -58,12 +46,11 @@ process GWASGLM {
         INTERACTION_IDX=\$((N_COVAR + 2))
         plink2 --pfile ${fileTag} \
                 --glm interaction omit-ref cols=+beta,+a1freq \
-                --pheno "pheno.tsv" \
-                --pheno-name ${phenoname} \
-                --covar "covar.tsv" \
+                --pheno "${samplelist}" \
+                --pheno-name ${pheno_list} \
+                --covar "${samplelist}" \
                 --covar-name \${COVAR_NAMES} \
-                --covar-variance-standardize \
-                --keep "pheno.tsv" \
+                --keep "${samplelist}" \
                 --output-chr chrM \
                 --mac ${params.minor_allele_ct} \
                 --hwe 1e-6 \
@@ -74,9 +61,9 @@ process GWASGLM {
                 --out ${outfile}_all_vars
         
         # Reorganize results: ADD as base, join interaction and 2DF columns
-        # Use awk to dynamically find columns and reshape data
+        # Process all phenotype output files
         INTERACT_TEST="ADDx${params.covar_interact}"
-        for glm_file in ${outfile}_all_vars.${phenoname}.glm.{linear,logistic.hybrid}; do
+        for glm_file in ${outfile}_all_vars.*.glm.{linear,logistic.hybrid}; do
             if [ -f "\${glm_file}" ]; then
                 output_file=\${glm_file/_all_vars/}
                 awk -v interact_test="\${INTERACT_TEST}" 'BEGIN{FS="\t"; OFS="\t"} 
@@ -127,12 +114,11 @@ process GWASGLM {
         # Standard analysis without interaction
         plink2 --pfile ${fileTag} \
                 --glm hide-covar omit-ref cols=+beta,+a1freq \
-                --pheno "pheno.tsv" \
-                --pheno-name ${phenoname} \
-                --covar "covar.tsv" \
+                --pheno "${samplelist}" \
+                --pheno-name ${pheno_list} \
+                --covar "${samplelist}" \
                 --covar-name \${COVAR_NAMES} \
-                --covar-variance-standardize \
-                --keep "pheno.tsv" \
+                --keep "${samplelist}" \
                 --output-chr chrM \
                 --mac ${params.minor_allele_ct} \
                 --hwe 1e-6 \
@@ -141,13 +127,13 @@ process GWASGLM {
                 --out ${outfile}
     fi
 
-    if [ -f ${outfile}.${phenoname}.glm.logistic.hybrid ]; then
-        mv ${outfile}.${phenoname}.glm.logistic.hybrid ${outfile}.${phenoname}.results
-    fi
-    
-    if [ -f ${outfile}.${phenoname}.glm.linear ]; then
-        mv ${outfile}.${phenoname}.glm.linear ${outfile}.${phenoname}.results
-    fi
+    # Rename all phenotype output files to .results extension
+    for result_file in ${outfile}.*.glm.{logistic.hybrid,linear}; do
+        if [ -f "\${result_file}" ]; then
+            new_name="\${result_file%.glm.*}.results"
+            mv "\${result_file}" "\${new_name}"
+        fi
+    done
     """
 }
 
@@ -185,11 +171,11 @@ process GWASGALLOP {
 
     gallop.py --gallop \
            --rawfile ${rawfile} \
-           --pheno "phenotypes.tsv" \
+           --pheno-file "phenotypes.tsv" \
            --pheno-name "${phenoname}" \
-           --covar ${samplelist} \
-           --covar-name ${params.covariates} \
-           ${params.covar_categorical ? "--covar-cat-name ${params.covar_categorical}" : ""} \
+           --covar-file ${samplelist} \
+           --covar-numeric ${params.covar_numeric} \
+           ${params.covar_categorical ? "--covar-categorical ${params.covar_categorical}" : ""} \
            --time-name ${params.time_col} \
            --out "${outfile}"
     """
@@ -227,9 +213,9 @@ process GWASCPH {
     ls -la *.raw *.tsv 2>/dev/null || echo "No files found"
     
     survival.R --rawfile ${rawfile} \
-               --pheno "phenotypes.tsv" \
-               --covar ${samplelist} \
-               --covar-name "${params.covariates}" \
+               --pheno-file "phenotypes.tsv" \
+               --covar-file ${samplelist} \
+               --covar-numeric "${params.covar_numeric}" \
                --covar-categorical "${params.covar_categorical}" \
                ${params.covar_interact ? "--covar-interact \"${params.covar_interact}\"" : ""} \
                --pheno-name "${phenoname}" \

@@ -4,11 +4,11 @@
 # Input files - REPLACE WITH YOUR DATA
 input: "/path/to/ancestry_specific/*.vcf.gz"
 covarfile: "/path/to/covariates.tsv"
-phenofile: "/path/to/phenotype.tsv"
+phenofile: "/path/to/phenotype.cs.tsv"
 
 # Variable names
 pheno_name: "y"
-covariates: "SEX age_at_baseline PC1 PC2 PC3 PC4 PC5"
+covar_numeric: "SEX age_at_baseline PC1 PC2 PC3 PC4 PC5"
 study_arm_col: "study_arm"
 time_col: "study_days"
 

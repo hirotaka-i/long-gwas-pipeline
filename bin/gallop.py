@@ -67,10 +67,39 @@ def load_plink_raw(fn):
   return pd.concat([cds, ds], axis=1)
 
 
-def preprocess(dp, dc, ds, covariates=None, covar_categorical=None,
+def preprocess(dp, dc, ds, covar_numeric=None, covar_categorical=None,
                standardize=True,  keep=None, time_name=None,
                pheno_name=None, MAF=None, rawfile=False, impute=None):
-
+  """Preprocess phenotype, covariate, and genotype data for GWAS analysis.
+  
+  This function:
+  1. Identifies common subjects across phenotype, covariate, and genotype datasets
+  2. Filters genotypes by MAF and missingness
+  3. Processes covariates:
+     - Standardizes numeric covariates to mean=0, variance=1
+     - One-hot encodes categorical covariates (drop_first=True to avoid multicollinearity)
+  4. Merges all data and creates necessary time/phenotype columns
+  
+  Args:
+    dp: Phenotype dataframe (must contain 'IID' column)
+    dc: Covariate dataframe (must contain 'IID' column)
+    ds: Genotype dataframe (must contain 'IID' column)
+    covar_numeric: List of numeric covariate column names (mutually exclusive with covar_categorical)
+    covar_categorical: List of categorical covariate column names (mutually exclusive with covar_numeric)
+    standardize: If True, standardize numeric covariates
+    keep: Optional file path with IIDs to keep
+    time_name: Column name for time variable (required for longitudinal analysis)
+    pheno_name: Phenotype column name(s) to include
+    MAF: Minimum allele frequency threshold for filtering variants
+    rawfile: If True, expect PLINK rawfile format with standard header columns
+    impute: Imputation strategy ('mean', 'median', etc.)
+  
+  Returns:
+    tuple: (data, ds, freq) where:
+      - data: Merged dataframe with standardized covariates, encoded categoricals, time, phenotype, and id
+      - ds: Filtered genotype dataframe
+      - freq: Dataframe with allele frequencies and missingness
+  """
   id_in_study = set.intersection(*[set(x['IID'].tolist()) for x in [dp, dc, ds]])
   sys.stdout.write("Found {} subjects\n".format(len(id_in_study)))
 
@@ -136,10 +165,12 @@ def preprocess(dp, dc, ds, covariates=None, covar_categorical=None,
   #              np.divide(df[time_name], 365.25),
   #              np.mean(np.divide(df[time_name].dropna(), 365.25)))
 
-  # Separate quantitative and categorical covariates
-  quant_covariates = [c for c in covariates if c not in (covar_categorical or [])]
+  # Check the covariates are mutually exclusive and create lists
+  quant_covariates = covar_numeric or []
   cat_covariates = covar_categorical or []
-  
+  if set(quant_covariates) & set(cat_covariates):
+    raise ValueError("Covariates must be specified in only one of covar_numeric or covar_categorical")
+
   # One-hot encode categorical covariates
   if cat_covariates:
     sys.stdout.write(f"One-hot encoding categorical covariates: {', '.join(cat_covariates)}\n")
@@ -328,6 +359,17 @@ def do_gallop(mdf, data, ds):
 
 
 def do_lme(data, ds, mod_formula=None, covariates=None):
+  """Fit linear mixed effects model for each SNP.
+  
+  Args:
+    data: Preprocessed dataframe with covariates, time, phenotype, and id
+    ds: Genotype dataframe
+    mod_formula: Optional custom model formula (if None, auto-generates from covariates)
+    covariates: List of covariate names (DEPRECATED - now extracted from data)
+  
+  Returns:
+    DataFrame with effect estimates for each SNP
+  """
   s = list(ds.columns)
   ns = len(s)
   beta_incpt = np.empty((ns, 4))
@@ -335,8 +377,11 @@ def do_lme(data, ds, mod_formula=None, covariates=None):
   
   ids = pd.factorize(data['id'].unique())[0] + 1
 
+  # Extract all covariate columns from data (numeric + encoded categorical)
+  all_covars = [c for c in data.columns if c not in ['id', 'time', 'y']]
+  
   if mod_formula is None:
-    mod_formula = 'y ~ time + ' + '+'.join(covariates) + ' + snp + sxt' if len(covariates) > 0 else 'snps + sxt'
+    mod_formula = 'y ~ time + ' + '+'.join(all_covars) + ' + snp + sxt' if len(all_covars) > 0 else 'y ~ time + snp + sxt'
   else:
     mod_formula += ' + time + snp + sxt'
 
@@ -455,16 +500,16 @@ https://www.nature.com/articles/s41598-018-24578-7
   parser.add_argument('--rawfile', help='plink RAW file')
   parser.add_argument('--prfile', help='Predictor file')
   parser.add_argument('--hdf-key', help='Key for HDF file')
-  parser.add_argument('--pheno', help='Phenotype file', required=True)
-  parser.add_argument('--covar', help='Covariate file', required=True)
+  parser.add_argument('--pheno-file', help='Phenotype file', required=True)
+  parser.add_argument('--covar-file', help='Covariate file', required=True)
   parser.add_argument('--model', help='Base model to fit if additional terms needed')
 
   parser.add_argument('--pheno-name', help='Phenotype or response the data is fit to, DEFAULT=y',
                       default='y')
   parser.add_argument('--pheno-name-file', help='File outlining the phenotypes (one on each line)') 
-  parser.add_argument('--covar-name', help='Covariates to include in the model ex: "SEX PC1 PC2"',
+  parser.add_argument('--covar-numeric', help='Numeric covariates to include in the model ex: "SEX PC1 PC2"',
                       required=True, nargs='+')
-  parser.add_argument('--covar-cat-name', help='Categorical covariates to one-hot encode ex: "site specimen"',
+  parser.add_argument('--covar-categorical', help='Categorical covariates to one-hot encode ex: "site specimen"',
                       nargs='+', default=[])
   parser.add_argument('--time-name', help='Column name of time variable in phenotype; required for GALLOP analysis',
                       default='study_days')
@@ -484,6 +529,13 @@ https://www.nature.com/articles/s41598-018-24578-7
 
   args = parser.parse_args()
 
+  # Check for overlapping covariates
+  if args.covar_categorical:
+    overlap = set(args.covar_numeric) & set(args.covar_categorical)
+    if overlap:
+      parser.error(f'Error: The following covariates appear in both --covar-numeric and --covar-categorical: {", ".join(overlap)}. '
+                   'Covariates must be specified in only one list.')
+
   if not (args.rawfile or args.prfile):
     parser.error('One predictor file must be specified --rawfile for plink RAW and --prfile for other formats')
 
@@ -491,8 +543,8 @@ https://www.nature.com/articles/s41598-018-24578-7
   if args.rawfile:
     rawfile = True
 
-  dp = load(args.pheno, hdf_key=args.hdf_key)
-  dc = load(args.covar, hdf_key=args.hdf_key)
+  dp = load(args.pheno_file, hdf_key=args.hdf_key)
+  dc = load(args.covar_file, hdf_key=args.hdf_key)
   
   if rawfile:
     ds = load_plink_raw(args.rawfile)
@@ -506,7 +558,7 @@ https://www.nature.com/articles/s41598-018-24578-7
   else:
     pheno_name = [args.pheno_name]
 
-  data, ds, freq = preprocess(dp, dc, ds, args.covar_name, args.covar_cat_name,
+  data, ds, freq = preprocess(dp, dc, ds, args.covar_numeric, args.covar_categorical,
                                       args.covar_variance_standardize, args.keep,
                                       args.time_name, pheno_name, args.maf, rawfile=rawfile, impute='mean')
 
@@ -544,20 +596,20 @@ https://www.nature.com/articles/s41598-018-24578-7
       #  sys.stdout.write(f'Refitting {len(refit_genos)} models with p-value < {args.refit_pval}')
 
       #  for s in refit_genos:
-      #    base_formula = args.model if args.model else f'y ~ {"+".join(args.covar_name)} + time'
+      #    base_formula = args.model if args.model else f'y ~ {" + ".join(all_covars)} + time'
       #    base_formula += f' + {s} + {s}xt'
       #    tmp_ds = ds[s].reset_index()
       #    tmp_ds['index'] = tmp_ds['index'] + 1
       #    tmp_data = pd.merge(data, tmp_ds, left_on='id', right_on='index', how='inner')
       #    tmp_data[f'{s}xt'] = tmp_data[s] * tmp_data['time']
           
-      #    base_mod = fit_lme(base_formiula, tmp_data)
+      #    base_mod = fit_lme(base_formula, tmp_data)
       #    tmp_mod.summary().coef
         
   elif args.lme:
     for pheno in pheno_name:
       data['y'] = data[pheno]
-      result = do_lme(data, ds, args.model, args.covar_name)
+      result = do_lme(data, ds, args.model)
       if args.out_fmt == 'gwas':
         result = format_gwas_output(ds, result, freq)
       else:

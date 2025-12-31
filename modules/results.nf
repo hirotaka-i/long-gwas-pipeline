@@ -9,7 +9,8 @@
 process SAVEGWAS {
   scratch true
   label 'two_cpu_large_mem'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}", mode: 'copy', overwrite: true
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}/split", mode: 'copy', overwrite: true, pattern: "*.{results,gallop,coxph}"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}", mode: 'copy', overwrite: true, pattern: "*_allresults.tsv"
 
   input:
     tuple val(pheno), path(sumstats)

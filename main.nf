@@ -28,7 +28,9 @@ log.info """\
  data ancestry                            : ${params.ancestry}
  genetic data assemble                    : ${params.assembly}
  phenotype name                           : ${params.pheno_name}
- covariates                               : ${params.covariates}
+ numeric covariates                       : ${params.covar_numeric}
+ categorical covariates                   : ${params.covar_categorical}
+ interaction covariate                    : ${params.covar_interact}
  analysis                                 : ${MODEL}
  project directory                        : ${params.project_dir}
  analysis name                            : ${params.analysis_name}
@@ -268,9 +270,37 @@ workflow {
         // For cross-sectional: use PLINK binary directly (no chunking, no raw export)
         EXPORT_PLINK(MERGE_PCA.out.flatten(), params.phenofile)
         
-        // Filter out null/empty sample lists (when no samples exist for a study arm)
-        EXPORT_PLINK.out
+        // Collect outputs from EXPORT_PLINK: pheno.tsv, covar_names.txt, n_covar.txt
+        // Log files (output[3]) are published automatically via publishDir
+        EXPORT_PLINK.out[0]
+            .mix(EXPORT_PLINK.out[1], EXPORT_PLINK.out[2])
+            .flatten()
             .filter{ it != null }
+            .map{ file ->
+                // Extract study arm from filename
+                def matcher = file.name =~ /(.+)_filtered\.pca\.pheno\.tsv/
+                if (matcher.find()) {
+                    return [matcher[0][1], file, 'pheno']
+                }
+                matcher = file.name =~ /(.+)_covar_names\.txt/
+                if (matcher.find()) {
+                    return [matcher[0][1], file, 'covar_names']
+                }
+                matcher = file.name =~ /(.+)_n_covar\.txt/
+                if (matcher.find()) {
+                    return [matcher[0][1], file, 'n_covar']
+                }
+                return null
+            }
+            .filter{ it != null }
+            .groupTuple(by: 0)
+            .map{ study_arm, files, types ->
+                // Return all three files grouped by study arm
+                def pheno_file = files[types.indexOf('pheno')]
+                def covar_names = files[types.indexOf('covar_names')]
+                def n_covar = files[types.indexOf('n_covar')]
+                return tuple(study_arm, pheno_file, covar_names, n_covar)
+            }
             .set{ PLINK_SAMPLE_LIST }
         
         // Unpack PLINK files for GLM - convert from [fileTag, [files]] to [fileTag, file1, file2, file3, file4]
@@ -293,7 +323,22 @@ workflow {
         GWASRES = GWASCPH.out
     } else {
         GWASGLM(CHUNKS, PLINK_SAMPLE_LIST, phenonames)
-        GWASRES = GWASGLM.out
+        
+        // Parse phenotype from filename and create tuples for grouping
+        // Filenames are like: EUR_chr20.phenoname.results
+        GWASGLM.out
+            .flatten()
+            .map{ file ->
+                // Extract phenotype name from filename pattern: study_arm_chr.phenoname.results
+                def matcher = file.name =~ /.*\.([^\.]+)\.results$/
+                if (matcher.find()) {
+                    def pheno = matcher[0][1]
+                    return tuple(pheno, file)
+                }
+                return null
+            }
+            .filter{ it != null }
+            .set{ GWASRES }
     }
 
     GWASRES

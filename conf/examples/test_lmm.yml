@@ -8,7 +8,7 @@ phenofile: "${projectDir}/example/phenotype.lt.tsv"
 
 # Variable names in covariate/phenotype files
 pheno_name: "y"
-covariates: "SEX age_at_baseline"
+covar_numeric: "SEX age_at_baseline PC1 PC2"
 covar_categorical: "site specimen"
 study_arm_col: "study_arm"
 time_col: "study_days"

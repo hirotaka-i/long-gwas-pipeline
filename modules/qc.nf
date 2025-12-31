@@ -13,6 +13,7 @@
 process CHECK_REFERENCES {
   label 'small'
   cache 'lenient'
+  publishDir "${GENOTYPES_DIR}/${params.genetic_cache_key}", mode: 'copy', overwrite: true, pattern: "references_ready.txt"
   
   output:
     path "references_ready.txt", emit: references_flag

@@ -43,6 +43,8 @@ Output: Association statistics + Manhattan plots
 ```bash
 git clone https://github.com/hirotaka-i/long-gwas-pipeline.git
 cd long-gwas-pipeline
+# Update to latest code if needed
+git pull origin main  
 ```
 
 
@@ -55,44 +57,38 @@ $STORE_ROOT/
 └── $PROJECT_NAME/
     ├── genotypes/
     │   └── ${genetic_cache_key}/        # e.g., vcf_EUR_hg38_maf0.05_kin0.177_skip
-    │       └── chromosomes/             # Chromosome-level standardized PLINK2 binaries
-    │           ├── chr1.pgen/pvar/psam  # Reused across all analyses with same genetic parameters
+    │       └── chromosomes/             # Reused across all analyses with same genetic parameters
+    │           ├── chr1.pgen/pvar/psam  # Chromosome-level variant QCed / standardized PLINK2 binaries
     │           ├── chr2.pgen/pvar/psam
     │           └── ...
     │
     ├── analyses/
-    │   └── ${genetic_cache_key}/        # Genetic_cache_key for the genetic input used
-    │       ├── genetic_qc/              # Shared across analyses with same genetics
-    │       │   ├── allchr_merged.*      # Chromosome-merged PLINK files
-    │       │   ├── simple_qc.h5         # Sample QC results
-    │       │   └── logs/                # Genetic QC logs
+    │   └── ${genetic_cache_key}/        # Genetic_cache_key of the genetic input used
+    │       ├── genetic_qc/              # Sample QC step. Shared across analyses with same genetics.
+    │       │   ├── merged_genotypes/    # Chromosome-merged PLINK files (Ready for pop_split/sample_qc)
+    │       │   └── sample_qc/           # Sample QC results
     │       │
-    │       └── ${analysis_name}/        # From YAML params file (e.g., pheno1_glm)
-    │           ├── data_prep/           # Analysis-specific data preparation
-    │           │   ├── pca/
-    │           │   ├── analysis_sets/
-    │           │   └── exported_files/
-    │           ├── gwas/                # GWAS results
-    │           │   ├── glm/             # or gallop/ or cph/
-    │           │   └── manhattan_plots/
-    │           └── logs/                # Analysis-specific logs
+    │       └── ${analysis_name}/        # Analysis-specific outputs (phenotype/model specific)
+    │           ├── prepared_data/       # Analysis-specific data preparation. E.g. study_arm split, PCs
+    │           └── gwas_results/        # GWAS results
     │
-    └── work/                            # Nextflow work directory (temporary)
+    └── work/                            # Nextflow work directory (Can be deleted after project completion)
 ```
-
-**Directory hierarchy:**
-- `genotypes/${genetic_cache_key}/chromosomes/`: Chromosome-level QC outputs (permanent cache via storeDir)
-- `analyses/${genetic_cache_key}/genetic_qc/`: Merged genetic QC shared across analyses (cache 'deep')
-- `analyses/${genetic_cache_key}/${analysis_name}/`: Analysis-specific outputs (phenotype/model specific)
 
 **Environment variables:**
 - `STORE_ROOT`: Root directory for all pipeline data - can be local path or GCS bucket (default: `$PWD`)
 - `PROJECT_NAME`: Unique identifier for your project (default: `unnamed_project`)
 
-**Cache key components:**
-- `genetic_cache_key` = `${format}_${ancestry}_${assembly}_maf${MAF}_kin${kinship}${skip_suffix}`
-  - `format`: vcf, pgen, or bed (input file type)
+**Parameter defined key components:**
+- `genetic_cache_key` = `${format}_${ancestry}_${assembly}_maf${MAF}_kin${kinship}_${skip_suffix}`
   - Example: `vcf_EUR_hg38_maf0.05_kin0.177_skip`
+    - `format`: vcf, pgen, or bed (input file type)
+    - `ancestry`: e.g., EUR, AFR, ALL (as specified in params)
+    - `assembly`: hg19 or hg38
+    - `MAF`: Minor allele frequency threshold (e.g., 0.01, 0.05)
+    - `kinship`: Kinship threshold used for sample QC (e.g., 0.0884, 0.177)
+    - `skip_suffix`: `skip` if `skip_pop_split` is true, otherwise omitted
+  
 - `analysis_name`: From your YAML params file (default: `unnamed_analysis`)
 
 ### Reference Folder Setup
@@ -111,7 +107,7 @@ The `References/` folder contains reference genome FASTA files and chain files f
     └── hg18ToHg38.over.chain.gz
 ```
 
-Foe example, if your target genotyping data is hg19, you can download required files using the provided script:
+For example, if your target genotyping data is hg19, you can download required files using the provided script:
 ```bash
 bin/download_references.sh hg19 References
 ```
@@ -134,9 +130,6 @@ example/
 ├── phenotype.lt.tsv   # Example longitudinal phenotype file (continuous)
 └── phenotype.surv.tsv # Example longitudinal phenotype file (survival)
 ```
-**Note**: 
-1. Because current workflow requires merging process using plink1.9, we use hard-calls not dosages.
-2. PLINK files can be an input if they are chromosome separated. But VCF input is preferred as the VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization.
 
 ### Configuration
 The pipeline is highly configurable. `./conf/` folder has configuration files for profiles and parameters.
@@ -152,17 +145,20 @@ For more details on parameters, see [conf/params.config](conf/params.config).
 
 ## Running the Pipeline
 
+**Note**: 
+* Because current workflow requires merging process using plink1.9, variants are converted to hard-call during the process. Thus, using 0.8 R2 threshold for imputed data is recommended.
+* PLINK files can be an input if they are chromosome separated. But VCF input is preferred as the VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization.
 
-#### Set Environment Variables
+### Set Environment Variables
 ```
 export STORE_ROOT='path/to/store_root'    # Default $PWD. Can be GCS bucket for cloud runs
 export PROJECT_NAME='my_gwas_test'        # Unique project identifier
 ```
 
-#### Preparation of `Reference` folder. 
+### Preparation of `Reference` folder. 
 
-
-### Local Execution (from cloned repository)
+### Execution
+#### Local Execution (from cloned repository)
 
 ```bash
 # Basic test survival run with example data
@@ -170,7 +166,7 @@ nextflow run main.nf -profile standard -params-file conf/examples/test_survival.
 ```
 Now you can customize `params.yml` with your own input files and parameters. see `conf/examples/` for more examples.
 
-### Local Execution with local Docker Image
+#### Local Execution with local Docker Image (For development and testing)
 
 ```bash
 # Build local Docker image first
@@ -179,34 +175,48 @@ docker build --platform linux/amd64 -f Dockerfile.ubuntu22 -t longgwas-local-tes
 nextflow run main.nf -profile localtest -params-file conf/examples/test_survival.yml
 ```
 
-### Biowulf
-First, build the Singularity image
+#### Biowulf
+Please read the official Biowulf Nextflow guide first: https://hpc.nih.gov/apps/nextflow.html
+
 ```bash
+module load singularity
+module load nextflow
+
+# Build Singularity image from Dockerhub image
 mkdir -p ./Docker
 cd ./Docker
-singularity build long-gwas-pipeline.sif docker://ghcr.io/hirotaka-i/long-gwas-pipeline:0.1.0
+
+export NXF_SINGULARITY_CACHEDIR=/data/$USER/nxf_singularity_cache;
+export SINGULARITY_CACHEDIR=/data/$USER/.singularity;
+
+singularity build long-gwas-pipeline.sif docker://ghcr.io/hirotaka-i/long-agwas-pipeline:latest
 cd ..
+
 # Submit the slurm job from the main directory
 nextflow run main.nf -profile biowulf -params-file conf/examples/test_survival.yml
+
 # or local
 nextflow run main.nf -profile biowulflocal -params-file conf/examples/test_survival.yml
 ```
+`biowulf` profile submits jobs to the cluster, but the main node should keep running until the workflow is complete (or submit it as a batch job). `biowulflocal` runs everything on the main node without submitting jobs to the cluster (useful for the small test run).
 
-
-### Verily Workbench / Google Cloud Batch
+#### Verily Workbench / Google Cloud Batch
 For verily Workbench, first create a GCS bucket to store your data. Then run the following commands from within the Verily Workbench VM. You would need to get a Tower access token from https://cloud.seqera.io/tokens to monitor your runs on Seqera Tower.
 ```bash
 # From within Verily Workbench VM
 export STORE_ROOT='gs://<your-bucket-name>'  # Bucket you created above
 export PROJECT_NAME='testrun'                # Any name for your project
-export TOWER_ACCESS_TOKEN='<your-token>'    # Get from https://cloud.seqera.io/tokens
+export TOWER_ACCESS_TOKEN='<your-token>'     # Get from https://cloud.seqera.io/tokens
+
 cd ~/repos/long-gwas-pipeline
+
 git pull origin main  # Update to latest code
+
 wb nextflow run main.nf -profile gcb -params-file conf/examples/test_survival.yml -with-tower
 ```
 
 
-### (In progress) Remote Execution - no clone needed)
+#### (In progress) Remote Execution - no clone needed)
 
 ```bash
 # Run from GitHub main branch

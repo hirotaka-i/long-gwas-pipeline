@@ -192,16 +192,23 @@ process RAWFILE_EXPORT {
 }
 
 process EXPORT_PLINK {
-  debug true
+  debug false
   scratch true
   label 'small'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
+  
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_filtered.pca.pheno.tsv"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_covar_names.txt"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_n_covar.txt"
+  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*_preprocessing.log"
 
   input:
     path samplelist
     path x, stageAs: 'phenotypes.tsv'
   output:
     path "*_filtered.pca.pheno.tsv", optional: true
+    path "*_covar_names.txt", optional: true
+    path "*_n_covar.txt", optional: true
+    path "*_preprocessing.log", optional: true
 
   script:
     def m = []
@@ -216,50 +223,13 @@ process EXPORT_PLINK {
     }
 
     """
-    #!/usr/bin/env python3
-    import pandas as pd
-    import numpy as np
-    import time
-    import sys
-
-    all_phenos = "${pheno_name}".split(',') if ',' in "${pheno_name}" else ["${pheno_name}"]
-    covars = "${params.covariates}".split(' ')
-    covar_cat = "${params.covar_categorical}".split(' ') if "${params.covar_categorical}" else []
-    d_pheno = pd.read_csv("phenotypes.tsv", sep="\t", engine='c')
-    d_sample = pd.read_csv("${samplelist}", sep="\t", engine='c')
-
-    d_result = pd.merge(d_pheno, d_sample, on='IID', how='inner')
-
-    if d_result.shape[0] > 0:
-      # Only include covariates explicitly specified by user
-      d_set = d_result.loc[:, ["#FID", "IID"] + all_phenos + covars].copy()
-      print(f"Including covariates: {covars}")
-      
-      # One-hot encode categorical covariates
-      if covar_cat:
-        for cat_col in covar_cat:
-          if cat_col in d_result.columns:
-            # Create dummy variables (drop first category to avoid multicollinearity)
-            dummies = pd.get_dummies(d_result[cat_col], prefix=cat_col, drop_first=True, dtype=int)
-            d_set = pd.concat([d_set, dummies], axis=1)
-            print(f"One-hot encoded '{cat_col}': {list(dummies.columns)}")
-      
-      # Convert binary phenotypes (0/1/missing) to PLINK format (1/2/-9)
-      for pheno_col in all_phenos:
-        if pheno_col in d_set.columns:
-          unique_vals = d_set[pheno_col].dropna().unique()
-          # Check if it's binary 0/1 coded (not already 1/2/-9)
-          if set(unique_vals).issubset({0, 1}) and len(unique_vals) > 0:
-            print(f"Converting binary phenotype '{pheno_col}' from 0/1 to PLINK format 1/2/-9")
-            # 0 -> 1 (control), 1 -> 2 (case), NaN -> -9 (missing)
-            d_set[pheno_col] = d_set[pheno_col].map({0: 1, 1: 2}).fillna(-9).astype(int)
-          elif set(unique_vals).issubset({1, 2, -9}):
-            # Already in PLINK format, ensure missing is -9
-            d_set[pheno_col] = d_set[pheno_col].fillna(-9).astype(int)
-            print(f"Phenotype '{pheno_col}' already in PLINK format 1/2/-9")
-      
-      d_set.to_csv("${outfile}_filtered.pca.pheno.tsv", sep="\\t", index=False)
-
-    time.sleep(10)
+    export_plink_preprocess.py \\
+        --samplelist ${samplelist} \\
+        --phenofile phenotypes.tsv \\
+        --outfile ${outfile} \\
+        --pheno-name "${pheno_name}" \\
+        --covar-numeric "${params.covar_numeric}" \\
+        --covar-categorical "${params.covar_categorical}" \\
+        --covar-interact "${params.covar_interact}"
     """
 }

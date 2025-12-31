@@ -2,13 +2,13 @@
 # Usage: nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file conf/examples/full_genome.yml
 
 # Input files - REPLACE WITH YOUR DATA
-input: "/path/to/your/genotypes/*.vcf.gz"
+input: "/path/to/your/genotypes/*.vcf.gz" # make sure not to include sex chromosomes.
 covarfile: "/path/to/your/covariates.tsv"
 phenofile: "/path/to/your/phenotype.tsv"
 
 # Variable names in covariate/phenotype files
 pheno_name: "y"  # Can be comma-separated for multiple phenotypes: "y1,y2,y3"
-covariates: "SEX age_at_baseline PC1 PC2 PC3 PC4 PC5"
+covar_numeric: "SEX age_at_baseline PC1 PC2 PC3 PC4 PC5"
 study_arm_col: "study_arm"
 time_col: "study_days"
 

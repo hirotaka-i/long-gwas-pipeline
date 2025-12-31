@@ -4,14 +4,14 @@ library('survival')
 library('optparse')
 
 option_list <- list(
-  make_option( c("--covar"), type="character", default=NULL,
-                 help="cross-sectional covariates"),
-  make_option( c("--pheno"), type="character", default=NULL,
-                 help="phenotype or outcome"),
+  make_option( c("--covar-file"), type="character", default=NULL,
+                 help="covariates file"),
+  make_option( c("--pheno-file"), type="character", default=NULL,
+                 help="phenotype or outcome file"),
   make_option( c("--rawfile"), type="character", default=NULL,
                  help="rawfile"),
-  make_option( c("--covar-name"), type="character", default=NULL,
-                 help="space delimited covariate list"),
+  make_option( c("--covar-numeric"), type="character", default="",
+                 help="space delimited numeric covariate list"),
   make_option( c("--covar-categorical"), type="character", default="",
                  help="space delimited categorical covariate list"),
   make_option( c("--covar-interact"), type="character", default="",
@@ -35,11 +35,12 @@ arguments <- parse_args( parser, positional_arguments=TRUE )
 opt <- arguments$options
 args <- arguments$args
 
-input.covariates <- unlist(strsplit(opt[['covar-name']], ' '))
-
-print(input.covariates)
-
-
+# Parse numeric covariates
+input.covariates <- c()
+if (opt[['covar-numeric']] != "" && !is.null(opt[['covar-numeric']])) {
+  input.covariates <- unlist(strsplit(opt[['covar-numeric']], ' '))
+  print(paste("Numeric covariates:", paste(input.covariates, collapse=", ")))
+}
 
 # Parse categorical covariates
 input.categorical <- c()
@@ -48,8 +49,16 @@ if (opt[['covar-categorical']] != "" && !is.null(opt[['covar-categorical']])) {
   print(paste("Categorical covariates:", paste(input.categorical, collapse=", ")))
 }
 
-data.pheno = read.table(opt$pheno, header=TRUE, comment.char='')
-data.covar = read.table(opt$covar, header=TRUE, comment.char='')
+# Check for overlapping covariates
+overlap <- intersect(input.covariates, input.categorical)
+if (length(overlap) > 0) {
+  stop(paste("Error: The following covariates appear in both --covar-numeric and --covar-categorical:",
+             paste(overlap, collapse=", "),
+             "\nCovariates must be specified in only one list."))
+}
+
+data.pheno = read.table(opt[['pheno-file']], header=TRUE, comment.char='')
+data.covar = read.table(opt[['covar-file']], header=TRUE, comment.char='')
 
 # function never completes on large rawfile
 #data.geno = read.table(opt$rawfile, header=TRUE, comment.char='')
@@ -168,7 +177,7 @@ data.geno <- data.frame(
 colnames(data.geno) <- c('IID', 'SNP')
                     
 basemod <- paste0("Surv(tstart,tend,", opt[['pheno-name']], ")~")
-basemod <- paste0(basemod, paste(unlist(input.covariates), collapse="+"))
+basemod <- paste0(basemod, paste(valid.covariates, collapse="+"))
 mod_cols = c('coef', 'exp(coef)', 'se(coef)', 'Pr(>|z|)')
 print( paste("Base survival model (+SNP + SNP:interaction if specified)", basemod) )
 

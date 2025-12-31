@@ -9,7 +9,7 @@ phenofile: "${projectDir}/example/phenotype.surv.tsv"
 
 # Variable names in covariate/phenotype files
 pheno_name: "surv_y"
-covariates: "SEX age_at_baseline PC1 PC2"
+covar_numeric: "SEX age_at_baseline PC1 PC2"
 covar_interact: "age_at_baseline"  # Test SNP x age_at_baseline interaction (must be numeric)
 study_arm_col: "study_arm"
 # tstart, tend columns should be included in the phenotype file for survival analysis
@@ -35,7 +35,7 @@ assembly: "hg19"
 skip_pop_split: false
 
 # Dataset identifier
-analysis_name: "TEST_SURV_INTERACT_CHR20_22"
+analysis_name: "TEST_SURV_INTERACT"
 
 # Visualization
 mh_plot: true

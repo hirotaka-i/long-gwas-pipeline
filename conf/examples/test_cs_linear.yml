@@ -2,13 +2,13 @@
 # Usage: nextflow run main.nf -profile localtest -params-file conf/examples/test_cs_linear.yml
 
 # Input files - using example data
-input: "${projectDir}/example/genotype/chr2[0-2].vcf"
+input: "${projectDir}/example/genotype/chr2[1-2].vcf"
 covarfile: "${projectDir}/example/covariates.tsv"
-phenofile: "${projectDir}/example/phenotype.cs.tsv"
+phenofile: "${projectDir}/example/phenotype.cs2.tsv"
 
 # Variable names in covariate/phenotype files
-pheno_name: "y"
-covariates: "SEX age_at_baseline"
+pheno_name: "y y2"
+covar_numeric: "SEX age_at_baseline PC1 PC2 PC3"
 covar_categorical: "site specimen"
 study_arm_col: "study_arm"
 

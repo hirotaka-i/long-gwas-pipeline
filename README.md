@@ -1,3 +1,6 @@
+> **Note:**
+This repository is underdevelopment. The documents in the `./docs/` folder are from previous versions and may be outdated. Please refer to the README.md for the latest information.**
+
 # longitudinal-GWAS-pipeline
 
 Repository for Nextflow pipeline to perform GWAS with longitudinal capabilities
@@ -47,10 +50,78 @@ cd long-gwas-pipeline
 git pull origin main  
 ```
 
+### Reference Folder Setup
+
+The `References/` folder contains reference genome FASTA files and chain files for liftover (to Hg38). They are required to be placed in the directory specified by the `reference_dir` parameter (default: `./References/`) with the following structure. 
+
+```
+<reference_dir>/ # Directory specified by `reference_dir` parameter. Default: `./References/`
+├── Genome/
+│   ├── hg38.fa.gz
+│   ├── hg38.fa.gz.fai
+│   ├── hg19.fa.gz
+│   └── hg19.fa.gz.fai
+└── liftOver/
+    ├── hg19ToHg38.over.chain.gz
+    └── hg18ToHg38.over.chain.gz
+```
+
+For example, if your target genotyping data is hg19, you can download required files using the provided script:
+```bash
+bin/download_references.sh hg19 References
+```
+
+### Script and Module Folders
+
+- `bin/`: Pipeline scripts (auto-mounted into containers)
+- `modules/`: Nextflow modules for each pipeline stage
+
+Nextflow automatically mounts these directory into containers and adds it to PATH. This means you can modify Python, R, shell and workflow scripts without rebuilding the container. The container is the working environment with all dependencies pre-installed but the actual scripts are in these directories.
+
+### Example Data and Codes
+[./example/](./example/) folder has the following structure. Please follow the format for your own input files.
+```
+example/
+├── genotype/          # Example VCF files (chr20-22)
+├── genotype_plink/    # Example PLINK files converted from VCFs
+├── covariate.csv      # Example covariate file     
+├── phenotype.cs.tsv   # Example cross-sectional phenotype file
+├── phenotype.lt.tsv   # Example longitudinal phenotype file (continuous)
+└── phenotype.surv.tsv # Example longitudinal phenotype file (survival)
+```
+
+### Configuration
+The pipeline is highly configurable. ./conf/ folder has configuration files for profiles and parameters.
+```
+conf/
+├── examples/    # Example parameter YAML files for different analytical modes using example dataset
+├── profiles/    # Profile configurations for different execution environments (local, biowulf, gcb, etc)
+├── base.config  # Base configuration file common to all profiles
+└── param.config # All the paramaters with default values and explanations
+```
+
+#### Parameter Configurations
+
+
+For all the paramaters, see [conf/params.config](conf/params.config). 
+
+[./conf/examples/](./conf/examples/) has example parameter YAML files for different analytical modes using the example dataset.
+
+
+#### Profile configurations
+The pipeline has pre-defined profiles for different execution environments. You can specify the profile using the `-profile` flag. Available profiles include:
+- `standard`: Local execution with Docker
+- `localtest`: Local execution with locally built Docker image (for development/testing)
+- `biowulf`: Biowulf cluster execution with Singularity
+- `biowulflocal`: Biowulf local execution without job submission
+- `gcb`: Google Cloud Batch execution (for Verily Workbench)
+
+These profiles can be customized in [conf/profiles/](conf/profiles/) folder.
+
 
 ### Output Directory Structure
 
-The pipeline uses a standardized directory structure across all profiles:
+After running the pipeline, the output directory structure under `STORE_ROOT/PROJECT_NAME/` will look like this:
 
 ```
 $STORE_ROOT/
@@ -90,58 +161,6 @@ $STORE_ROOT/
     - `skip_suffix`: `skip` if `skip_pop_split` is true, otherwise omitted
   
 - `analysis_name`: From your YAML params file (default: `unnamed_analysis`)
-
-### Reference Folder Setup
-
-The `References/` folder contains reference genome FASTA files and chain files for liftover (to Hg38). They are required to be placed in the directory specified by the `reference_dir` parameter (default: `./References/`) with the following structure. 
-
-```
-<reference_dir>/ # Directory specified by `reference_dir` parameter. Default: `./References/`
-├── Genome/
-│   ├── hg38.fa.gz
-│   ├── hg38.fa.gz.fai
-│   ├── hg19.fa.gz
-│   └── hg19.fa.gz.fai
-└── liftOver/
-    ├── hg19ToHg38.over.chain.gz
-    └── hg18ToHg38.over.chain.gz
-```
-
-For example, if your target genotyping data is hg19, you can download required files using the provided script:
-```bash
-bin/download_references.sh hg19 References
-```
-
-### Script and Module Folders
-
-- `bin/`: Pipeline scripts (auto-mounted into containers)
-- `modules/`: Nextflow modules for each pipeline stage
-
-Nextflow automatically mounts these directory into containers and adds it to PATH. This means you can modify Python, R, shell and workflow scripts without rebuilding the container. The container is the working environment with all dependencies pre-installed but the actual scripts are in these directories.
-
-### Example Data and Codes
-`./example/` folder has the following structure
-```
-example/
-├── genotype/          # Example VCF files (chr20-22)
-├── genotype_plink/    # Example PLINK files converted from VCFs
-├── covariate.csv      # Example covariate file     
-├── phenotype.cs.tsv   # Example cross-sectional phenotype file
-├── phenotype.lt.tsv   # Example longitudinal phenotype file (continuous)
-└── phenotype.surv.tsv # Example longitudinal phenotype file (survival)
-```
-
-### Configuration
-The pipeline is highly configurable. `./conf/` folder has configuration files for profiles and parameters.
-```
-conf/
-├── examples/    # Example parameter YAML files for different analytical modes using example dataset
-├── profiles/    # Profile configurations for different execution environments (local, biowulf, gcb, etc)
-├── base.config  # Base configuration file common to all profiles
-└── param.config # All the paramaters with default values and explanations
-```
-For more details on parameters, see [conf/params.config](conf/params.config).
-
 
 ## Running the Pipeline
 
@@ -223,8 +242,6 @@ wb nextflow run main.nf -profile gcb -params-file conf/examples/test_survival.ym
 nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file myparams.yml
 
 ```
-
-
 
 ### TIPS
 * `-resume` flag can be used to resume failed runs. Data modifications and model changes can reuse the cached qced-genetics.
@@ -310,6 +327,19 @@ Merged/aggregated results reuse based on **content**, not paths:
 If the pipeline fails, check the following:
 - `.nextflow.log` for general errors. reports (html) are also useful. 
 - Check the failed process ID, and review Nextflow logs in `work/` directory for error details.
+- Common issues:
+  - Input file format errors (VCF/PLINK) --> validate input files
+  - Missing reference files --> download using provided script `bin/download_references.sh`
+  - Insufficient resources (memory/CPU) --> adjust resource parameters in the profile configs
+
+If pipeline ran succssessfully but results look off:
+- Check the number of jobs in each process
+- Verify input sample and variant counts in `genotypes/${genetic_cache_key}/chromosomes/chr*/.psam` files.
+- Check sample QC summaries in `analyses/${genetic_cache_key}/genetic_qc/sample_qc/` to ensure expected sample counts after QC.
+- Review PCA plots in `prepared_data/` to confirm population structure.
+- Check the analyzed phenotypes and covariates in `prepared_data/` to ensure correct data preparation.
+- Review model specifications in the .command files by checking the `work/` directory for the GWAS execution step.
+
 
 ## Support
 

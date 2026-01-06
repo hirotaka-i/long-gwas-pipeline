@@ -13,29 +13,29 @@ process SAVEGWAS {
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}", mode: 'copy', overwrite: true, pattern: "*_allresults.tsv"
 
   input:
-    tuple val(pheno), path(sumstats)
+    tuple val(pop_studyarm_pheno), path(sumstats)
     val(model)
 
   output:
     path(sumstats), emit: res_split
-    path "${pheno}_allresults.tsv", emit: res_all
+    path "${pop_studyarm_pheno}_allresults.tsv", emit: res_all
 
   script:
     """
-    echo ${pheno}
+    echo ${pop_studyarm_pheno}
     COUNTER=0
     for file in ${sumstats}
     do
       COUNTER=\$((COUNTER+1))
       if [[ \$COUNTER -eq 1 ]]
       then
-        cat \${file} > "${pheno}_allresults.tsv"
+        cat \${file} > "${pop_studyarm_pheno}_allresults.tsv"
       else
-        tail -n +2 \${file} >> "${pheno}_allresults.tsv"
+        tail -n +2 \${file} >> "${pop_studyarm_pheno}_allresults.tsv"
       fi
     done
-    bedtools sort -i "${pheno}_allresults.tsv" -header > "${pheno}_allresults.tsv.tmp"
-    mv "${pheno}_allresults.tsv.tmp" "${pheno}_allresults.tsv"
+    bedtools sort -i "${pop_studyarm_pheno}_allresults.tsv" -header > "${pop_studyarm_pheno}_allresults.tsv.tmp"
+    mv "${pop_studyarm_pheno}_allresults.tsv.tmp" "${pop_studyarm_pheno}_allresults.tsv"
     """
 }
 

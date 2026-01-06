@@ -327,23 +327,25 @@ workflow {
     } else {
         GWASGLM(CHUNKS, phenonames)
         
-        // Parse study_arm and phenotype from filename to create proper key
-        // Filenames are like: EUR_0_chr10_EUR_REGARDS_MARCH_2025.ICI.results
-        // Need to extract study_arm (EUR_0) and phenotype (ICI) to match GWASCPH format
-        GWASGLM.out
+        // Use manifest to create proper tuples
+        // GWASGLM.out[0] = result files, GWASGLM.out[1] = manifest files
+        
+        // Parse manifest: tuple(filename, key)
+        GWASGLM.out[1]
+            .splitCsv(header: true, sep: '\t')
+            .map{ row -> tuple(row.filename, row.key) }
+            .set{ manifest_ch }
+        
+        // Flatten result files and map to tuple(filename, file)
+        GWASGLM.out[0]
             .flatten()
-            .map{ file ->
-                // Pattern: study_arm_chrN_*.phenoname.results
-                def matcher = file.name =~ /^([^_]+_\d+)_chr\d+.*\.([^\.]+)\.results$/
-                if (matcher.find()) {
-                    def study_arm = matcher[0][1]  // e.g., EUR_0
-                    def pheno = matcher[0][2]       // e.g., ICI
-                    def key = "${study_arm}_${pheno}"  // e.g., EUR_0_ICI
-                    return tuple(key, file)
-                }
-                return null
-            }
-            .filter{ it != null }
+            .map{ file -> tuple(file.name, file) }
+            .set{ results_ch }
+        
+        // Join by filename, then remap to (key, file)
+        manifest_ch
+            .join(results_ch)
+            .map{ filename, key, file -> tuple(key, file) }
             .set{ GWASRES }
     }
 

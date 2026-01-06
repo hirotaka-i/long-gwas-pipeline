@@ -12,14 +12,17 @@ process GWASGLM {
   label 'medium'
 
   input:
-    tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar), val(study_arm), path(samplelist), path(covar_names_file), path(n_covar_file)
+    tuple val(fileTag), path(plog), path(pgen), path(psam), path(pvar), val(pop_studyarm), path(samplelist), path(covar_names_file), path(n_covar_file)
     val phenonames
 
   output:
     path "*.results"
+    path "manifest.tsv"
+    // unlike other gwas processes, multiple phenotypes can processed together
+    // manifest.tsv maps each result file to its key (pop_studyarm_phenotype)
 
   script:
-    def outfile = "${study_arm}_${fileTag}"
+    def outfile = "${pop_studyarm}_${fileTag}"
     // Convert phenonames to space-separated string for plink2
     // Handle both String and List input formats
     def pheno_list = phenonames instanceof List ? phenonames.join(' ') : phenonames.toString().replaceAll(/[\[\]'"]/, '').trim()
@@ -126,11 +129,18 @@ process GWASGLM {
                 --out ${outfile}
     fi
 
-    # Rename all phenotype output files to .results extension
+    # Rename all phenotype output files to .results extension and create manifest
+    echo -e "key\tfilename" > manifest.tsv
     for result_file in ${outfile}.*.glm.{logistic.hybrid,linear}; do
         if [ -f "\${result_file}" ]; then
             new_name="\${result_file%.glm.*}.results"
             mv "\${result_file}" "\${new_name}"
+            
+            # Extract phenotype name from filename
+            # Pattern: pop_studyarm_fileTag.phenotype.results
+            phenotype=\$(basename "\${new_name}" .results | rev | cut -d'.' -f1 | rev)
+            key="${pop_studyarm}_\${phenotype}"
+            echo -e "\${key}\t\${new_name}" >> manifest.tsv
         fi
     done
     """
@@ -155,9 +165,9 @@ process GWASGALLOP {
     outfile = "${m[0][1]}"
 
     def getkey = []
-    def pop_pheno = samplelist.getName()
-    getkey = pop_pheno =~ /(.*)_filtered.pca.tsv/
-    pop_pheno = getkey[0][1]
+    def pop_studyarm = samplelist.getName()
+    getkey = pop_studyarm =~ /(.*)_filtered.pca.tsv/
+    pop_studyarm = getkey[0][1]
 
     def model = ""
     if (params.model != '') {
@@ -166,7 +176,7 @@ process GWASGALLOP {
 
     """
     set -x
-    KEY="${pop_pheno}_${phenoname}"
+    KEY="${pop_studyarm}_${phenoname}"
 
     gallop.py --gallop \
            --rawfile ${rawfile} \
@@ -199,13 +209,13 @@ process GWASCPH {
     outfile = "${m[0][1]}.coxph"
 
     def getkey = []
-    def pop_pheno = samplelist.getName()
-    getkey = pop_pheno =~ /(.*)_filtered.pca.tsv/
-    pop_pheno = getkey[0][1]
+    def pop_studyarm = samplelist.getName()
+    getkey = pop_studyarm =~ /(.*)_filtered.pca.tsv/
+    pop_studyarm = getkey[0][1]
 
     """
     set -x
-    KEY="${pop_pheno}_${phenoname}"
+    KEY="${pop_studyarm}_${phenoname}"
     
     echo "Processing: ${rawfile.name}"
     echo "Available files:"

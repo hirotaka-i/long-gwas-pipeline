@@ -38,6 +38,8 @@ echo "[INFO] Threads: ${N}"
 
 # Step 1: Remove duplicates, keep biallelic SNPs only, MAF>=2
 plink2 ${INFMT} "${INFILE}" \
+       --set-all-var-ids '@:#:$r:$a' \
+       --new-id-max-allele-len 100 truncate \
        --rm-dup exclude-all \
        --snps-only just-acgt \
        --max-alleles 2 \
@@ -172,13 +174,13 @@ plink2 --pfile "${OUTPREFIX}_refalign" \
 echo "[INFO] Complete: ${OUTPREFIX}_p1out.{pgen,pvar,psam}"
 
 # Cleanup intermediate files
-rm -f "${OUTPREFIX}_dedup".{pgen,pvar,psam,log} \
-      "${OUTPREFIX}_dedup_r2filtered".{pgen,pvar,psam,log} \
-      "${OUTPREFIX}_geno".{bed,bim,fam,log} \
-      "${OUTPREFIX}_named".{pgen,pvar,psam,log} \
-      "${OUTPREFIX}_hg38".{pgen,pvar,psam,log} \
-      "${OUTPREFIX}_refalign".{pgen,pvar,psam,log} \
-      "${OUTPREFIX}_norm".{pgen,pvar,psam,log} \
+rm -f "${OUTPREFIX}_dedup".{pgen,pvar,psam} \
+      "${OUTPREFIX}_dedup_r2filtered".{pgen,pvar,psam} \
+      "${OUTPREFIX}_geno".{bed,bim,fam} \
+      "${OUTPREFIX}_named".{pgen,pvar,psam} \
+      "${OUTPREFIX}_hg38".{pgen,pvar,psam} \
+      "${OUTPREFIX}_refalign".{pgen,pvar,psam} \
+      "${OUTPREFIX}_norm".{pgen,pvar,psam} \
       "${OUTPREFIX}"_lift.* \
       "${OUTPREFIX}"_keep.ids \
       "${OUTPREFIX}"_update.* \

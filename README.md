@@ -165,7 +165,6 @@ $STORE_ROOT/
 ## Running the Pipeline
 
 **Note**: 
-* Because current workflow requires merging process using plink1.9, variants are converted to hard-call during the process. Thus, using 0.8 R2 threshold for imputed data is recommended.
 * PLINK files can be an input if they are chromosome separated. But VCF input is preferred as the VCF workflow has multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering and more parallelization.
 
 ### Set Environment Variables

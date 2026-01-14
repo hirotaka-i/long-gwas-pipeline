@@ -156,5 +156,5 @@ plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned --make-
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed --make-pgen --rm-dup exclude-all --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq
 # geno 0.1 filter (lenient because potentially mixed ancestry samples)
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq --make-pgen --geno 0.1 dosage --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01
-# convert to plink bed format with keep-allele-order for merging in the next steps
-plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01 --keep-allele-order --make-bed --out ${FILE}_p1out
+# convert to plink pgen format with standardized pvar columns for merging
+plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01 --make-pgen 'pvar-cols=' --out ${FILE}_p1out

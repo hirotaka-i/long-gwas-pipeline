@@ -154,8 +154,8 @@ process GENETICQC {
   EXIT_CODE=\$?
   END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
   
-  if [ -f "${chunkId}.bed" ] && [ -f "${chunkId}.bim" ] && [ -f "${chunkId}.fam" ]; then
-    VARIANT_COUNT=\$(wc -l < ${chunkId}.bim)
+  if [ -f "${chunkId}.pgen" ] && [ -f "${chunkId}.pvar" ] && [ -f "${chunkId}.psam" ]; then
+    VARIANT_COUNT=\$(grep -vc "^#" ${chunkId}.pvar || echo 0)
     STATUS="SUCCESS"
     echo "✓ Successfully processed chunk with \${VARIANT_COUNT} variants"
   else
@@ -233,7 +233,7 @@ process GENETICQCPLINK {
 process MERGER_CHUNKS {
   scratch true
   label 'large'
-  storeDir { "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${mergelist.getSimpleName()}" }
+  publishDir "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${mergelist.getSimpleName()}", mode: 'copy', overwrite: true
 
   input:
     file mergelist
@@ -247,12 +247,7 @@ process MERGER_CHUNKS {
       """
       set +x
 
-      plink --merge-list ${mergelist} \
-        --keep-allele-order \
-        --threads ${task.cpus} \
-        --out ${fileTag}
-      
-      plink2 --bfile ${fileTag} \
+      plink2 --pmerge-list ${mergelist} \
         --make-pgen \
         --sort-vars \
         --threads ${task.cpus} \
@@ -262,7 +257,7 @@ process MERGER_CHUNKS {
       """
       set +x
       
-      plink2 -pfile ${fileTag}.1_p1out \
+      plink2 --pfile ${fileTag}.1_p1out \
         --make-pgen \
         --sort-vars \
         --threads ${task.cpus} \
@@ -297,7 +292,6 @@ process MERGER_CHRS {
       CHR_NAME=\$(cat tmp_mergefile.txt)
       plink2 --pfile "\${CHR_NAME}" \
         --threads ${task.cpus} \
-        --keep-allele-order \
         --make-pgen \
         --sort-vars \
         --out "allchr_merged"
@@ -306,7 +300,6 @@ process MERGER_CHRS {
       plink2 --memory ${task.memory.toMega()} \
         --threads ${task.cpus} \
         --pmerge-list "tmp_mergefile.txt" \
-        --keep-allele-order \
         --make-pgen \
         --sort-vars \
         --out "allchr_merged"

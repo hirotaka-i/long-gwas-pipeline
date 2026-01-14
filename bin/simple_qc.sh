@@ -18,7 +18,7 @@ echo "Threads: ${THREADS}"
 # Step 1: Callrate filtering (mind=0.05)
 echo "Step 1: Callrate filtering..."
 plink2 --pfile ${GENO} \
-       --mind 0.05 \
+       --mind 0.05 dosage \
        --make-pgen \
        --threads ${THREADS} \
        --out ${GENO}_callrate

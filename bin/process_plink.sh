@@ -145,15 +145,14 @@ plink2 --pfile "$WORKPFX" \
 ## without this process, raw file has dosage and inconsistent with VCF-based processing)
 plink2 --pfile "${OUTPREFIX}_norm" \
        --geno 0.1 \
-       --make-bed \
-       --keep-allele-order \
+       --make-pgen \
        --threads "$N" \
        --out "${OUTPREFIX}_geno_hc"
 
 
 # Step 4: Align REF/ALT to reference FASTA
 echo "[INFO] Aligning REF/ALT to hg38 reference"
-plink2 --bfile "${OUTPREFIX}_geno_hc" \
+plink2 --pfile "${OUTPREFIX}_geno_hc" \
        --fa "$FA_HG38" \
        --ref-from-fa force \
        --make-pgen \

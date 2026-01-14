@@ -46,7 +46,7 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
 /* 
  * Import consolidated modules
  */
-include { CHECK_REFERENCES; GENETICQC; GENETICQCPLINK; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
+include { CHECK_REFERENCES; SPLIT_VCF; GENETICQC; GENETICQCPLINK; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
 include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN } from './modules/results.nf'
@@ -83,6 +83,21 @@ workflow {
     // PROCESS 0: CHECK REFERENCE GENOMES (runs once)
     // ==================================================================================
     CHECK_REFERENCES()
+    
+    // Prepare reference files channel
+    def refDir = params.reference_dir
+    reference_files = Channel.fromPath([
+        "${refDir}/Genome/hg38.fa.gz",
+        "${refDir}/Genome/hg38.fa.gz.fai",
+        "${refDir}/Genome/hg38.fa.gz.gzi"
+    ] + (params.assembly != 'hg38' ? [
+        "${refDir}/Genome/${params.assembly}.fa.gz",
+        "${refDir}/Genome/${params.assembly}.fa.gz.fai",
+        "${refDir}/Genome/${params.assembly}.fa.gz.gzi",
+        "${refDir}/liftOver/${params.assembly}ToHg38.over.chain.gz"
+    ] : []), checkIfExists: true)
+    .collect()
+    .view{ "Reference files: ${it}" }
     
     // ==================================================================================
     // QUALITY CONTROL (QC) PHASE
@@ -137,20 +152,19 @@ workflow {
         // VCF INPUT PATHWAY: Chunk, process, merge
         // ============================================================
         
-        // Chunk VCF files and process with headers
-        chrvcf
-        .map{ fileTag, fOrig -> tuple(fileTag, fOrig) }
-        .flatMap { fileTag, fOrig ->
-            // Split into chunks WITHOUT keepHeader (GENETICQC will add full headers)
-            def chunks = fOrig.splitText(by: params.chunk_size, file: true, compress: true, keepHeader: false)
-            chunks.collect { chunk -> tuple(fileTag, fOrig, chunk) }
-        }
+        // Split VCF files into chunks using a process (faster on cloud)
+        SPLIT_VCF(chrvcf)
+        
+        // Flatten chunks: [fileTag, fOrig, [chunk1, chunk2, ...]] → multiple [fileTag, fOrig, chunk]
+        SPLIT_VCF.out.vcf_chunks
+        .transpose()
+        .map{ fileTag, fOrig, fChunk -> tuple(fileTag, fOrig, fChunk) }
         .combine(CHECK_REFERENCES.out.references_flag)
         .map{ fileTag, fOrig, fChunk, references_flag -> tuple(fileTag, fOrig, fChunk) }
-        .set{ vcf_input_ch }
+        .set{ vcf_chunks_ch }
 
         // Process VCF chunks (adds headers internally)
-        GENETICQC(vcf_input_ch)
+        GENETICQC(vcf_chunks_ch, reference_files)
         
         // Collect processing status for tracking
         GENETICQC.out.chunk_status

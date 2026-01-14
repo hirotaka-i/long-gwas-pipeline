@@ -19,13 +19,18 @@ process CHECK_REFERENCES {
     path "references_ready.txt", emit: references_flag
   
   script:
+  // Check if RESOURCE_DIR is a GCS path
+  def isGCS = RESOURCE_DIR.startsWith('gs://')
+  def checkCmd = isGCS ? 'gsutil -q stat' : 'test -f'
+  def successCheck = isGCS ? '&& echo "exists"' : ''
+  
   """
   echo "Checking reference genomes for assembly: ${params.assembly}" > references_ready.txt
   echo "Reference directory: ${RESOURCE_DIR}" >> references_ready.txt
   echo "" >> references_ready.txt
   
   # Verify critical files exist
-  if [ ! -f "${RESOURCE_DIR}/Genome/hg38.fa.gz" ]; then
+  if ! ${checkCmd} "${RESOURCE_DIR}/Genome/hg38.fa.gz" ${successCheck} 2>/dev/null; then
     echo "ERROR: hg38 reference genome not found at: ${RESOURCE_DIR}/Genome/hg38.fa.gz" | tee -a references_ready.txt
     echo "" | tee -a references_ready.txt
     echo "Please download references before running the pipeline:" | tee -a references_ready.txt
@@ -33,7 +38,7 @@ process CHECK_REFERENCES {
     exit 1
   fi
   
-  if [ ! -f "${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" ]; then
+  if ! ${checkCmd} "${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" ${successCheck} 2>/dev/null; then
     echo "ERROR: hg38 reference index not found at: ${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" | tee -a references_ready.txt
     echo "" | tee -a references_ready.txt
     echo "Please download references before running the pipeline:" | tee -a references_ready.txt
@@ -45,7 +50,7 @@ process CHECK_REFERENCES {
   echo "✓ hg38.fa.gz.fai found" >> references_ready.txt
   
   if [ "${params.assembly}" != "hg38" ]; then
-    if [ ! -f "${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" ]; then
+    if ! ${checkCmd} "${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" ${successCheck} 2>/dev/null; then
       echo "ERROR: ${params.assembly} reference genome not found at: ${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
@@ -53,7 +58,7 @@ process CHECK_REFERENCES {
       exit 1
     fi
     
-    if [ ! -f "${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" ]; then
+    if ! ${checkCmd} "${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" ${successCheck} 2>/dev/null; then
       echo "ERROR: ${params.assembly} reference index not found at: ${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
@@ -61,7 +66,7 @@ process CHECK_REFERENCES {
       exit 1
     fi
     
-    if [ ! -f "${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" ]; then
+    if ! ${checkCmd} "${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" ${successCheck} 2>/dev/null; then
       echo "ERROR: Liftover chain file not found at: ${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
@@ -80,6 +85,40 @@ process CHECK_REFERENCES {
   """
 }
 
+/* Process 0b - Split VCF into chunks (runs on cloud for better performance) */
+process SPLIT_VCF {
+  label 'medium'
+  scratch true
+  
+  input: 
+    tuple val(fileTag), path(vcf)
+  
+  output: 
+    tuple val(fileTag), path(vcf), path("${fileTag}.chunk_*.vcf.gz"), emit: vcf_chunks
+  
+  script:
+  """
+  # Extract header once
+  bcftools view -h ${vcf} > header.vcf
+  
+  # Split body into chunks
+  bcftools view -H ${vcf} | split -l ${params.chunk_size} - chunk_
+  
+  # Add headers and compress in parallel using bash background jobs
+  for chunk in chunk_*; do
+    (cat header.vcf \$chunk | bgzip > ${fileTag}.\${chunk}.vcf.gz) &
+    # Limit concurrent jobs to task.cpus
+    if [[ \$(jobs -r -p | wc -l) -ge ${task.cpus} ]]; then
+      wait -n
+    fi
+  done
+  wait
+  
+  # Clean up intermediate files
+  rm -f chunk_* header.vcf
+  """
+}
+
 /* Process 1a - Variant Standardization for VCF (chunked) */
 process GENETICQC {
   scratch true
@@ -88,6 +127,7 @@ process GENETICQC {
 
   input:
     tuple val(fileTag), path(fOrig), path(fChunk)
+    path(ref_files)
   output:
     path("${chunkId}.*"), optional: true, emit: snpchunks_merge
     tuple val(fileTag), val(chunkId), optional: true, emit: snpchunks_names
@@ -101,6 +141,22 @@ process GENETICQC {
   """
   set +e
   
+  # Create local References directory structure
+  mkdir -p References/Genome References/liftOver
+  
+  # Symlink reference files to expected locations
+  for ref_file in ${ref_files}; do
+    filename=\$(basename "\$ref_file")
+    if [[ "\$filename" == *.chain.gz ]]; then
+      ln -sf "\$(readlink -f "\$ref_file")" "References/liftOver/\$filename"
+    else
+      ln -sf "\$(readlink -f "\$ref_file")" "References/Genome/\$filename"
+    fi
+  done
+  
+  # Set RESOURCE_DIR to local References directory
+  export RESOURCE_DIR="\$PWD/References"
+  
   echo "=== GENETICQC Debug Info ==="
   echo "fileTag: ${fileTag}"
   echo "fOrig: ${fOrig}"
@@ -110,15 +166,16 @@ process GENETICQC {
   echo "chunkId: ${chunkId}"
   echo "Assigned cpus: ${task.cpus}"
   echo "Assigned memory: ${task.memory}"
+  echo "RESOURCE_DIR: \$RESOURCE_DIR"
   echo ""
   
   START_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
 
   # Check if chunk already has header (first chunk with splitText keepHeader:false still has header)
   if [[ ${fChunk} == *.gz ]]; then
-    CHUNK_HEADER_LINES=\$(gunzip -c ${fChunk} | grep -c "^#" || echo 0)
+    CHUNK_HEADER_LINES=\$(gunzip -c ${fChunk} | grep -c "^#" 2>/dev/null || echo 0 | tr -d '\n')
   else
-    CHUNK_HEADER_LINES=\$(grep -c "^#" ${fChunk} || echo 0)
+    CHUNK_HEADER_LINES=\$(grep -c "^#" ${fChunk} 2>/dev/null || echo 0 | tr -d '\n')
   fi
   
   echo "Chunk header lines: \${CHUNK_HEADER_LINES}"
@@ -345,7 +402,7 @@ process SIMPLE_QC {
   cache 'deep'
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.{h5,txt}"
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.png"
-  label 'large'
+  label 'medium'
   
   input:
     path "*" 

@@ -97,12 +97,13 @@ process SPLIT_VCF {
     tuple val(fileTag), path(vcf), path("${fileTag}.chunk_*.vcf.gz"), emit: vcf_chunks
   
   script:
+  def split_chunk_size = params.chunk_size * 3
   """
   # Extract header once
   bcftools view -h ${vcf} > header.vcf
   
-  # Split body into chunks
-  bcftools view -H ${vcf} | split -l ${params.chunk_size} - chunk_
+  # Split body into chunks (using 3x chunk_size for better parallelization)
+  bcftools view -H ${vcf} | split -l ${split_chunk_size} - chunk_
   
   # Add headers and compress in parallel using bash background jobs
   for chunk in chunk_*; do

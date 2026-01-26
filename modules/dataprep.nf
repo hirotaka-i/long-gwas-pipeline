@@ -122,72 +122,63 @@ process RAWFILE_EXPORT {
     study_arm = samplelist.getName()
     m = study_arm =~ /(.*)_filtered.pca.tsv/
     study_arm = m[0][1]
-    def pvar = plinkFiles.find{ it.name.endsWith('.pvar') }
+    def filtered_prefix = "${study_arm}_${fileTag}_filtered"
 
     """
-    #!/usr/bin/env python3
+    set -euo pipefail
     
-    # Generate chunks from pvar file
-    fn = "${pvar}"
-    chunk_file = "chunks.txt"
-    count = 0
-    id_pairs = []
-    start, end = None, None
+    # Step 1: Apply all filters once to create filtered plink file
+    echo "Filtering ${fileTag} with MAF, HWE, and sample filters..."
     
-    with open(fn, 'r') as f:
-        for l in iter(f.readline, ''):
-            if l[0] == '#':
-                continue
-            data = l.strip().split('\\t')
-            vid = data[2]
-            count += 1
-            if start is None:
-                start = vid
-
-            if count >= ${params.chunk_size}:
-                end = vid
-                id_pairs.append((start, end))
-                start = None
-                end = None
-                count = 0
-
-    if count > 0:
-        end = vid
-        id_pairs.append((start, end))
-
-    with open(chunk_file, 'w') as f:
-        for start, end in id_pairs:
-            f.write('\\t'.join([start, end]) + '\\n')
+    plink2 \
+        --pfile ${fileTag} \
+        --keep ${samplelist} \
+        --mac ${params.minor_allele_ct} \
+        --hwe 1e-6 \
+        --update-sex ${samplelist} \
+        --pheno ${samplelist} \
+        --pheno-col-nums 4 \
+        --make-pgen \
+        --threads ${task.cpus} \
+        --memory ${task.memory.toMega()} \
+        --out ${filtered_prefix}
     
-    print(f"Generated {len(id_pairs)} chunks for ${fileTag}")
+    # Step 2: Generate chunks from filtered pvar file using awk
+    echo "Generating chunks from filtered variants..."
     
-    # Now process chunks with plink2
-    import subprocess
-    
-    with open(chunk_file, 'r') as f:
-        for line in f:
-            from_var, to_var = line.strip().split('\\t')
-            nameout = f"${study_arm}_${fileTag}_{from_var}_{to_var}"
+    awk -v chunk_size=${params.chunk_size} '
+        BEGIN { count=0; start=""; }
+        !/^#/ {
+            vid = \$3;
+            count++;
+            if (start == "") start = vid;
             
-            cmd = [
-                "plink2",
-                "--pfile", "${fileTag}",
-                "--keep", "${samplelist}",
-                "--export", "A",
-                "--from", from_var,
-                "--to", to_var,
-                "--mac", "${params.minor_allele_ct}",
-                "--update-sex", "${samplelist}",
-                "--pheno", "${samplelist}",
-                "--pheno-col-nums", "4",
-                "--hwe", "1e-6",
-                "--out", nameout,
-                "--threads", "${task.cpus}",
-                "--memory", "${task.memory.toMega()}"
-            ]
-            
-            print(f"Processing chunk: {from_var} to {to_var}")
-            subprocess.run(cmd, check=True)
+            if (count >= chunk_size) {
+                print start "\\t" vid;
+                start = "";
+                count = 0;
+            }
+        }
+        END { if (count > 0) print start "\\t" vid; }
+    ' ${filtered_prefix}.pvar > chunks.txt
+    
+    NUM_CHUNKS=\$(wc -l < chunks.txt)
+    echo "Generated \${NUM_CHUNKS} chunks for ${fileTag} (after filtering)"
+    
+    # Step 3: Export .raw files from filtered plink file
+    while IFS=\$'\\t' read -r from_var to_var; do
+        nameout="${study_arm}_${fileTag}_\${from_var}_\${to_var}"
+        echo "Exporting chunk: \${from_var} to \${to_var}"
+        
+        plink2 \
+            --pfile ${filtered_prefix} \
+            --export A \
+            --from \${from_var} \
+            --to \${to_var} \
+            --out \${nameout} \
+            --threads ${task.cpus} \
+            --memory ${task.memory.toMega()}
+    done < chunks.txt
     """
 }
 

@@ -119,9 +119,13 @@ workflow {
         // Gather all companion files (.pgen, .pvar, .psam or .bed, .bim, .fam)
         chrvcf
         .map{ fileTag, fOrig ->
-            def base = fOrig.toString().replaceFirst(/\.(bed|pgen)$/, '')
+            // Use toUri() to preserve full path (works for both GCS and local files)
+            // For GCS: gs://bucket/path/file.pgen
+            // For local: file:///path/to/file.pgen
+            def fullPath = fOrig.toUri().toString()
+            def basePath = fullPath.replaceFirst(/\.(bed|pgen)$/, '')
             def ext = fOrig.name =~ /\.bed$/ ? ['bed', 'bim', 'fam'] : ['pgen', 'pvar', 'psam']
-            def files = ext.collect{ file("${base}.${it}") }
+            def files = ext.collect{ file(basePath + '.' + it) }
             tuple(fileTag, files)
         }
         .combine(CHECK_REFERENCES.out.references_flag)
@@ -129,7 +133,7 @@ workflow {
         .set{ plink_input_ch }
 
         // Process PLINK files directly to cache
-        GENETICQCPLINK(plink_input_ch)
+        GENETICQCPLINK(plink_input_ch, reference_files)
         
         // Collect processing status for tracking
         GENETICQCPLINK.out.chunk_status

@@ -54,6 +54,7 @@ process GWASGLM {
                 --covar-name \${COVAR_NAMES} \
                 --keep "${samplelist}" \
                 --output-chr chrM \
+                --maf ${params.minor_allele_freq} \
                 --mac ${params.minor_allele_ct} \
                 --hwe 1e-6 \
                 --parameters 1-\${INTERACTION_IDX} \
@@ -122,6 +123,7 @@ process GWASGLM {
                 --covar-name \${COVAR_NAMES} \
                 --keep "${samplelist}" \
                 --output-chr chrM \
+                --maf ${params.minor_allele_freq} \
                 --mac ${params.minor_allele_ct} \
                 --hwe 1e-6 \
                 --threads ${task.cpus} \

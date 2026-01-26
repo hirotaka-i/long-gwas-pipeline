@@ -236,6 +236,7 @@ process GENETICQCPLINK {
 
   input:
     tuple val(fileTag), path(chr_pfiles)
+    path(ref_files)
   output:
     tuple path("${fileTag}.psam"), path("${fileTag}.pgen"), path("${fileTag}.pvar"), path("${fileTag}.log"), emit: plink_qc_cached
     tuple val(fileTag), path("${fileTag}.status.txt"), emit: chunk_status
@@ -244,11 +245,28 @@ process GENETICQCPLINK {
   def outputPrefix = "${fileTag}_processed"
 
   """
+  # Create local References directory structure
+  mkdir -p References/Genome References/liftOver
+  
+  # Symlink reference files to expected locations
+  for ref_file in ${ref_files}; do
+    filename=\$(basename "\$ref_file")
+    if [[ "\$filename" == *.chain.gz ]]; then
+      ln -sf "\$(readlink -f "\$ref_file")" "References/liftOver/\$filename"
+    else
+      ln -sf "\$(readlink -f "\$ref_file")" "References/Genome/\$filename"
+    fi
+  done
+  
+  # Set RESOURCE_DIR to local References directory
+  export RESOURCE_DIR="\$PWD/References"
+  
   echo "Processing PLINK file: ${chr_pfiles}"
   echo "Input prefix: ${fileTag}"
   echo "Output prefix: ${outputPrefix}"
   echo "Assigned cpus: ${task.cpus}"
   echo "Assigned memory: ${task.memory}"
+  echo "RESOURCE_DIR: \$RESOURCE_DIR"
   
   START_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
 

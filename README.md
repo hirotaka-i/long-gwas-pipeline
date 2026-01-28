@@ -12,18 +12,69 @@ This pipeline supports three types of genetic association analyses:
 - **Longitudinal** (GALLOP/LMM): Repeated measures analysis with time-varying phenotypes
 - **Survival** (Cox PH): Time-to-event analysis
 
+
 **Pipeline stages:**
 ```
 Input: VCF files + Phenotypes + Covariates
   ↓
 Stage 1: Genetic QC (filtering, normalization, merging)
   ↓
-Stage 2: Data Preparation (outlier removal, PCA, formatting)
+Stage 2: Data Preparation (sample QC, Analysis set creation, PCA)
   ↓
 Stage 3: GWAS Execution (GLM/GALLOP/CPH)
   ↓
 Output: Association statistics + Manhattan plots
 ```
+
+
+## graphic overview
+```mermaid
+graph TD
+    %% Input and Initialization
+    StartGen([VCF or PLINK data]) --> CheckRef[CHECK_REFERENCES]
+    StartPheno([Phenotypes + Covariates]) --> MakeSets
+    
+    %% Genetic QC Phase
+    CheckRef --> IsPlink{Input Type?}
+    IsPlink -- VCF --> SplitVCF[SPLIT_VCF]
+    SplitVCF --> GenQC[GENETIC_QC Chunks]
+    GenQC --> MergeChunks[MERGE_CHUNKS]
+    
+    IsPlink -- PLINK --> GenQCPlink[GENETIC_QC_PLINK]
+    
+    MergeChunks --> MergeChr[MERGER_CHRS: All Chromosomes]
+    GenQCPlink --> MergeChr
+    
+    %% Population and PCA Phase
+    MergeChr --> PopSplit{Skip Pop Split?}
+    PopSplit -- No --> GWASQC[GWASQC: Ancestry Inference]
+    PopSplit -- Yes --> SimpleQC[SIMPLE_QC: Basic QC]
+    
+    GWASQC --> MakeSets[MAKE_ANALYSIS_SETS]
+    SimpleQC --> MakeSets
+    MakeSets --> ComputePCA[COMPUTE_PCA & MERGE_PCA]
+    
+    %% Analysis Branching
+    ComputePCA --> ModelType{Analysis Type?}
+    
+    ModelType -- Longitudinal --> RawExp1[RAWFILE_EXPORT]
+    RawExp1 --> Gallop[GWAS_GALLOP]
+    
+    ModelType -- Survival --> RawExp2[RAWFILE_EXPORT]
+    RawExp2 --> CPH[GWAS_CPH]
+    
+    ModelType -- Cross-sectional --> PlinkExp[EXPORT_PLINK]
+    PlinkExp --> GLM[GWAS_GLM]
+    
+    %% Results Management
+    Gallop --> Save[SAVE_GWAS]
+    CPH --> Save
+    GLM --> Save
+    
+    Save --> Plot[MANHATTAN PLOT]
+    Plot --> End([Final Results])
+```
+
 
 ## Starting Guide
 

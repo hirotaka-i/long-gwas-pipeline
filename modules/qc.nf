@@ -87,7 +87,7 @@ process CHECK_REFERENCES {
 
 /* Process 0b - Split VCF into chunks (runs on cloud for better performance) */
 process SPLIT_VCF {
-  label 'medium'
+  label 'small'
   scratch true
   
   input: 
@@ -97,26 +97,26 @@ process SPLIT_VCF {
     tuple val(fileTag), path(vcf), path("${fileTag}.chunk_*.vcf.gz"), emit: vcf_chunks
   
   script:
-  def split_chunk_size = params.chunk_size * 3
+  def split_chunk_size = params.chunk_size * 1
   """
-  # Extract header once
+  echo "=== SPLIT_VCF ==="
+  echo "Original VCF: ${vcf}"
+  echo ""
+  
+  echo "Extracting header..."
   bcftools view -h ${vcf} > header.vcf
   
-  # Split body into chunks (using 3x chunk_size for better parallelization)
-  bcftools view -H ${vcf} | split -l ${split_chunk_size} - chunk_
+  echo "Splitting into chunks..."
+  bcftools view -H ${vcf} \
+    | split -l ${split_chunk_size} -d -a 6 \
+        --filter="bash -c 'cat header.vcf - | bgzip -@ ${task.cpus} > ${fileTag}.chunk_\\\$FILE.vcf.gz'" \
+        -
   
-  # Add headers and compress in parallel using bash background jobs
-  for chunk in chunk_*; do
-    (cat header.vcf \$chunk | bgzip > ${fileTag}.\${chunk}.vcf.gz) &
-    # Limit concurrent jobs to task.cpus
-    if [[ \$(jobs -r -p | wc -l) -ge ${task.cpus} ]]; then
-      wait -n
-    fi
-  done
-  wait
+  # Clean up
+  rm -f header.vcf
   
-  # Clean up intermediate files
-  rm -f chunk_* header.vcf
+  echo ""
+  echo "Created \$(ls -1 ${fileTag}.chunk_*.vcf.gz | wc -l) chunks"
   """
 }
 
@@ -124,7 +124,8 @@ process SPLIT_VCF {
 process GENETICQC {
   scratch true
   label 'medium'
-  errorStrategy 'ignore'
+  errorStrategy { task.exitStatus in [137, 143] ? 'retry' : 'ignore' }
+  maxRetries 2
 
   input:
     tuple val(fileTag), path(fOrig), path(fChunk)
@@ -140,8 +141,6 @@ process GENETICQC {
   chunkId = "${prefix}_p1out"
 
   """
-  set +e
-  
   # Create local References directory structure
   mkdir -p References/Genome References/liftOver
   
@@ -212,17 +211,34 @@ process GENETICQC {
   EXIT_CODE=\$?
   END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
   
-  if [ -f "${chunkId}.pgen" ] && [ -f "${chunkId}.pvar" ] && [ -f "${chunkId}.psam" ]; then
+  # Check for OOM error first (exit codes 137=SIGKILL, 143=SIGTERM)
+  if [ -f "${prefix}_error_type.txt" ] && grep -q "OOM_ERROR" "${prefix}_error_type.txt"; then
+    VARIANT_COUNT=0
+    STATUS="OOM_ERROR"
+    echo "ERROR: Process was killed due to out of memory (OOM)" >&2
+    echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\tOOM_ERROR\t\${VARIANT_COUNT}" > ${chunkId}.status.txt
+    exit \${EXIT_CODE}
+  elif [ \$EXIT_CODE -eq 137 ] || [ \$EXIT_CODE -eq 143 ]; then
+    # Caught by exit code but no error file created
+    VARIANT_COUNT=0
+    STATUS="OOM_ERROR"
+    echo "ERROR: Process was killed (likely OOM). Exit code: \${EXIT_CODE}" >&2
+    echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\tOOM_ERROR\t\${VARIANT_COUNT}" > ${chunkId}.status.txt
+    exit \${EXIT_CODE}
+  elif [ -f "${chunkId}.pgen" ] && [ -f "${chunkId}.pvar" ] && [ -f "${chunkId}.psam" ]; then
     VARIANT_COUNT=\$(grep -vc "^#" ${chunkId}.pvar || echo 0)
     STATUS="SUCCESS"
     echo "✓ Successfully processed chunk with \${VARIANT_COUNT} variants"
+    echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\t\${STATUS}\t\${VARIANT_COUNT}" > ${chunkId}.status.txt
   else
+    # No output files but process exited normally - legitimate filtering result
     VARIANT_COUNT=0
-    STATUS="FAILED"
-    echo "⚠ Warning: Chunk produced no variants after filtering" >&2
+    STATUS="EMPTY_OUTPUT"
+    echo "⚠ Warning: Chunk produced no variants after filtering (this is OK)" >&2
+    echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\t\${STATUS}\t\${VARIANT_COUNT}" > ${chunkId}.status.txt
+    # Don't create output files - this will prevent this chunk from being included in merge
+    rm -f ${chunkId}.pgen ${chunkId}.pvar ${chunkId}.psam ${chunkId}.log 2>/dev/null || true
   fi
-  
-  echo -e "${fileTag}\t${chunkId}\t${fChunk}\t\${START_TIME}\t\${END_TIME}\t\${EXIT_CODE}\t\${STATUS}\t\${VARIANT_COUNT}" > ${chunkId}.status.txt
   
   exit 0
   """
@@ -307,13 +323,12 @@ process GENETICQCPLINK {
 }
 
 process MERGER_CHUNKS {
-  scratch true
   label 'large'
   publishDir "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${mergelist.getSimpleName()}", mode: 'copy', overwrite: true
 
   input:
-    file mergelist
-    file "*"
+    path mergelist
+    path "*"
   output:
     tuple file("${fileTag}.psam"), file("${fileTag}.pgen"), file("${fileTag}.pvar"), file("${fileTag}.log"), emit: snpchunks_qc_merged
 
@@ -322,8 +337,40 @@ process MERGER_CHUNKS {
     if (params.chunk_flag) {
       """
       set +x
-
-      plink2 --pmerge-list ${mergelist} \
+      
+      echo "=== MERGER_CHUNKS Debug Info ==="
+      echo "Working directory: \$PWD"
+      echo "Mergelist file: ${mergelist}"
+      echo "Original mergelist contents:"
+      cat ${mergelist}
+      echo ""
+      
+      # Filter mergelist to only include chunks with all three files present
+      > filtered_mergelist.txt
+      while IFS= read -r fname; do
+        if [ -f "\${fname}.psam" ] && [ -f "\${fname}.pgen" ] && [ -f "\${fname}.pvar" ]; then
+          echo "\$fname" >> filtered_mergelist.txt
+        else
+          echo "  ⚠ Skipping \$fname (missing files)" >&2
+        fi
+      done < ${mergelist}
+      
+      echo ""
+      echo "Filtered mergelist (only valid chunks):"
+      cat filtered_mergelist.txt
+      echo ""
+      
+      # Check if we have any valid chunks
+      CHUNK_COUNT=\$(wc -l < filtered_mergelist.txt | tr -d ' ')
+      if [ "\$CHUNK_COUNT" -eq 0 ]; then
+        echo "ERROR: No valid chunks found to merge!" >&2
+        exit 1
+      fi
+      
+      echo "Merging \$CHUNK_COUNT chunks"
+      echo ""
+      
+      plink2 --pmerge-list filtered_mergelist.txt \
         --make-pgen \
         --sort-vars \
         --threads ${task.cpus} \
@@ -332,6 +379,13 @@ process MERGER_CHUNKS {
     } else {
       """
       set +x
+      
+      echo "=== MERGER_CHUNKS Debug Info (no chunking) ==="
+      echo "Working directory: \$PWD"
+      echo "Looking for: ${fileTag}.1_p1out"
+      echo "Files in current directory:"
+      ls -lh
+      echo ""
       
       plink2 --pfile ${fileTag}.1_p1out \
         --make-pgen \
@@ -343,14 +397,13 @@ process MERGER_CHUNKS {
 }
 
 process MERGER_CHRS {
-  scratch true
   cache 'deep'
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/merged_genotypes", mode: 'copy', overwrite: true, pattern: "*.{pgen,pvar,psam}"
   publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/merge_all", mode: 'copy', overwrite: true, pattern: "*.log"
   label 'large'
 
   input:
-    file mergelist
+    path mergelist
     path "*"
   output:
     path ("allchr_merged.{pgen,pvar,psam,log}")

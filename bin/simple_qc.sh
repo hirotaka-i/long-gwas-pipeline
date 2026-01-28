@@ -64,10 +64,13 @@ plink2 --pfile ${GENO}_callrate_het_king \
        --threads ${THREADS} \
        --out ${OUT}_pca
 
-# Step 5: Generate kinship table
-echo "Step 5: Generating kinship table..."
+# Step 5: Generate kinship table (filter to reduce file size)
+# Use lenient threshold (0.0442 = 4th degree relatives) to capture potential relatives
+# while reducing file size from GB to MB. Actual filtering done in simple_qc_helper.py
+echo "Step 5: Generating kinship table (pairs >= 0.0442, 4th degree relatives)..."
 plink2 --pfile ${GENO}_callrate_het_king \
        --make-king-table \
+       --king-table-filter 0.0442 \
        --threads ${THREADS} \
        --out ${OUT}_king
 

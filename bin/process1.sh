@@ -123,14 +123,41 @@ then
     plink2 --threads ${N} \
            --vcf ${FILE}_split.vcf.gz dosage=DS \
            --make-pgen --allow-extra-chr --autosome-par --out ${FILE}_split
+    EXIT_CODE=$?
+    if [ $EXIT_CODE -eq 137 ] || [ $EXIT_CODE -eq 143 ]; then
+        echo "ERROR: plink2 was killed (likely OOM). Exit code: $EXIT_CODE" >&2
+        echo "OOM_ERROR" > ${FILE}_error_type.txt
+        exit $EXIT_CODE
+    elif [ $EXIT_CODE -ne 0 ]; then
+        echo "ERROR: plink2 failed with exit code: $EXIT_CODE" >&2
+        exit $EXIT_CODE
+    fi
 else
     plink2 --threads ${N} \
            --vcf ${FILE}_split.vcf.gz --make-pgen --allow-extra-chr --autosome-par --out ${FILE}_split
+    EXIT_CODE=$?
+    if [ $EXIT_CODE -eq 137 ] || [ $EXIT_CODE -eq 143 ]; then
+        echo "ERROR: plink2 was killed (likely OOM). Exit code: $EXIT_CODE" >&2
+        echo "OOM_ERROR" > ${FILE}_error_type.txt
+        exit $EXIT_CODE
+    elif [ $EXIT_CODE -ne 0 ]; then
+        echo "ERROR: plink2 failed with exit code: $EXIT_CODE" >&2
+        exit $EXIT_CODE
+    fi
 fi
 
 # Step 5: Left-normalize using fasta file (hg38)
 plink2 --threads ${N} \
        --pfile ${FILE}_split --make-pgen --fa $FA --normalize --sort-vars --out ${FILE}_split_hg38_normalized
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 137 ] || [ $EXIT_CODE -eq 143 ]; then
+    echo "ERROR: plink2 normalize was killed (likely OOM). Exit code: $EXIT_CODE" >&2
+    echo "OOM_ERROR" > ${FILE}_error_type.txt
+    exit $EXIT_CODE
+elif [ $EXIT_CODE -ne 0 ]; then
+    echo "ERROR: plink2 normalize failed with exit code: $EXIT_CODE" >&2
+    exit $EXIT_CODE
+fi
 
 # select relevant snps with more than sigleton (For small cohorts, this process reduces a lot of variants)
 # Also filter to keep only the expected chromosome

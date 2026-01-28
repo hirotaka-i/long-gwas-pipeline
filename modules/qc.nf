@@ -171,39 +171,10 @@ process GENETICQC {
   
   START_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
 
-  # Check if chunk already has header (first chunk with splitText keepHeader:false still has header)
-  if [[ ${fChunk} == *.gz ]]; then
-    CHUNK_HEADER_LINES=\$(gunzip -c ${fChunk} | grep -c "^#" 2>/dev/null || echo 0 | tr -d '\n')
-  else
-    CHUNK_HEADER_LINES=\$(grep -c "^#" ${fChunk} 2>/dev/null || echo 0 | tr -d '\n')
-  fi
-  
-  echo "Chunk header lines: \${CHUNK_HEADER_LINES}"
-  
-  if [ "\${CHUNK_HEADER_LINES}" -gt 0 ]; then
-    echo "Chunk already has header, using as-is"
-    cp ${fChunk} ${prefix}_with_header.vcf.gz
-  else
-    echo "Chunk missing header, extracting from original file"
-    # Extract header from original VCF using bcftools
-    bcftools view -h ${fOrig} > header.txt
-    HEADER_LINES=\$(wc -l < header.txt)
-    echo "Extracted \${HEADER_LINES} header lines from original file"
-    
-    # Combine header with chunk data
-    if [[ ${fChunk} == *.gz ]]; then
-      cat header.txt <(gunzip -c ${fChunk}) | bgzip > ${prefix}_with_header.vcf.gz
-    else
-      cat header.txt ${fChunk} | bgzip > ${prefix}_with_header.vcf.gz
-    fi
-  fi
-  
-  echo "Created ${prefix}_with_header.vcf.gz"
-  ls -lh ${prefix}_with_header.vcf.gz
-
+  # SPLIT_VCF already adds headers to all chunks, so we can use them directly
   process1.sh \
     ${task.cpus} \
-    ${prefix}_with_header.vcf.gz \
+    ${fChunk} \
     ${params.r2thres} \
     ${params.assembly} \
     ${prefix}

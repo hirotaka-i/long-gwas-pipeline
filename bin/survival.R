@@ -214,30 +214,38 @@ for (i in 1:n_snps) {
   data.geno$SNP <- alt_counts
   data.mtx = merge( data.merged, data.geno, by='IID' )
   
-  if (use_interaction) {
-    # Test SNP with interaction term
-    eq = paste0(basemod, "+", 'SNP+SNP:', interact_covar)
-    mdl = coxph(as.formula(eq), data=data.mtx)
-    res = summary(mdl)
-    
-    # Extract main SNP effect
-    snp_stats = res$coefficients['SNP',][mod_cols]
-    
-    # Extract interaction effect (could be SNP:covar or covar:SNP based on alphabetical order)
-    interact_term1 <- paste0('SNP:', interact_covar)
-    interact_term2 <- paste0(interact_covar, ':SNP')
-    interact_term <- if (interact_term1 %in% rownames(res$coefficients)) interact_term1 else interact_term2
-    interact_stats = res$coefficients[interact_term,][mod_cols]
-    
-    # Combine: main effect + interaction effect
-    stats[i,] = c(snp_stats, interact_stats)
-  } else {
-    # Ordinary analysis without interaction
-    eq = paste0(basemod, "+", 'SNP')
-    mdl = coxph(as.formula(eq), data=data.mtx)
-    res = summary(mdl)
-    stats[i,] = res$coefficients['SNP',][mod_cols]
-  }
+  tryCatch({
+    if (use_interaction) {
+      # Test SNP with interaction term
+      eq = paste0(basemod, "+", 'SNP+SNP:', interact_covar)
+      mdl = coxph(as.formula(eq), data=data.mtx)
+      res = summary(mdl)
+      
+      # Extract main SNP effect
+      snp_stats = res$coefficients['SNP',][mod_cols]
+      
+      # Extract interaction effect (could be SNP:covar or covar:SNP based on alphabetical order)
+      interact_term1 <- paste0('SNP:', interact_covar)
+      interact_term2 <- paste0(interact_covar, ':SNP')
+      interact_term <- if (interact_term1 %in% rownames(res$coefficients)) interact_term1 else interact_term2
+      interact_stats = res$coefficients[interact_term,][mod_cols]
+      
+      # Combine: main effect + interaction effect
+      stats[i,] = c(snp_stats, interact_stats)
+    } else {
+      # Ordinary analysis without interaction
+      eq = paste0(basemod, "+", 'SNP')
+      mdl = coxph(as.formula(eq), data=data.mtx)
+      res = summary(mdl)
+      stats[i,] = res$coefficients['SNP',][mod_cols]
+    }
+  }, error = function(e) {
+    # Log error to stderr and continue with NA values
+    cat(file=stderr(), paste0("Cox model error fitting ", marker.id, "\n"))
+    cat(file=stderr(), paste0(conditionMessage(e), "\n"))
+    flush(stderr())
+    # stats[i,] remains NA (already initialized)
+  })
 }
                     
                     

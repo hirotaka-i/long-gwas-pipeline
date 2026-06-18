@@ -26,20 +26,20 @@ process CHECK_REFERENCES {
   
   """
   echo "Checking reference genomes for assembly: ${params.assembly}" > references_ready.txt
-  echo "Reference directory: ${params.reference_dir}" >> references_ready.txt
+  echo "Reference directory: \${RESOURCE_DIR}" >> references_ready.txt
   echo "" >> references_ready.txt
   
   # Verify critical files exist
-  if ! ${checkCmd} "${params.reference_dir}/Genome/hg38.fa.gz" ${successCheck} 2>/dev/null; then
-    echo "ERROR: hg38 reference genome not found at: ${params.reference_dir}/Genome/hg38.fa.gz" | tee -a references_ready.txt
+  if ! ${checkCmd} "\${RESOURCE_DIR}/Genome/hg38.fa.gz" ${successCheck} 2>/dev/null; then
+    echo "ERROR: hg38 reference genome not found at: \${RESOURCE_DIR}/Genome/hg38.fa.gz" | tee -a references_ready.txt
     echo "" | tee -a references_ready.txt
     echo "Please download references before running the pipeline:" | tee -a references_ready.txt
     echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
     exit 1
   fi
   
-  if ! ${checkCmd} "${params.reference_dir}/Genome/hg38.fa.gz.fai" ${successCheck} 2>/dev/null; then
-    echo "ERROR: hg38 reference index not found at: ${params.reference_dir}/Genome/hg38.fa.gz.fai" | tee -a references_ready.txt
+  if ! ${checkCmd} "\${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" ${successCheck} 2>/dev/null; then
+    echo "ERROR: hg38 reference index not found at: \${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" | tee -a references_ready.txt
     echo "" | tee -a references_ready.txt
     echo "Please download references before running the pipeline:" | tee -a references_ready.txt
     echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
@@ -50,24 +50,24 @@ process CHECK_REFERENCES {
   echo "✓ hg38.fa.gz.fai found" >> references_ready.txt
   
   if [ "${params.assembly}" != "hg38" ]; then
-    if ! ${checkCmd} "${params.reference_dir}/Genome/${params.assembly}.fa.gz" ${successCheck} 2>/dev/null; then
-      echo "ERROR: ${params.assembly} reference genome not found at: ${params.reference_dir}/Genome/${params.assembly}.fa.gz" | tee -a references_ready.txt
+    if ! ${checkCmd} "\${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" ${successCheck} 2>/dev/null; then
+      echo "ERROR: ${params.assembly} reference genome not found at: \${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
       echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
       exit 1
     fi
     
-    if ! ${checkCmd} "${params.reference_dir}/Genome/${params.assembly}.fa.gz.fai" ${successCheck} 2>/dev/null; then
-      echo "ERROR: ${params.assembly} reference index not found at: ${params.reference_dir}/Genome/${params.assembly}.fa.gz.fai" | tee -a references_ready.txt
+    if ! ${checkCmd} "\${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" ${successCheck} 2>/dev/null; then
+      echo "ERROR: ${params.assembly} reference index not found at: \${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
       echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
       exit 1
     fi
     
-    if ! ${checkCmd} "${params.reference_dir}/liftOver/${params.assembly}ToHg38.over.chain.gz" ${successCheck} 2>/dev/null; then
-      echo "ERROR: Liftover chain file not found at: ${params.reference_dir}/liftOver/${params.assembly}ToHg38.over.chain.gz" | tee -a references_ready.txt
+    if ! ${checkCmd} "\${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" ${successCheck} 2>/dev/null; then
+      echo "ERROR: Liftover chain file not found at: \${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
       echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt

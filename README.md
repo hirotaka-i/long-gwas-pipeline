@@ -80,7 +80,7 @@ graph TD
 
 ### Prerequisites
 
-- **Nextflow** >= 21.04.0 (DSL2 required)
+- **Nextflow** >= 26.04.0 (recommended)
   ```bash
   # Check your version
   nextflow -version
@@ -88,6 +88,18 @@ graph TD
   # Install/update Nextflow
   curl -s https://get.nextflow.io | bash
   ```
+
+> **Important (Parser Compatibility):**
+> - **Nextflow 26.04+**: run commands normally.
+> - **Nextflow 25.02 to 25.10**: set parser mode explicitly before running:
+>   ```bash
+>   export NXF_SYNTAX_VERSION=v2
+>   ```
+>   or prefix each command:
+>   ```bash
+>   NXF_SYNTAX_VERSION=v2 nextflow run main.nf -profile standard -params-file conf/examples/test_survival.yml
+>   ```
+
 - **Docker** or **Singularity** (for containerized execution)
   - Docker Desktop (Mac/Windows) or Docker Engine (Linux)
   - OR Singularity/Apptainer (HPC environments)
@@ -228,6 +240,9 @@ export PROJECT_NAME='my_gwas_test'        # Unique project identifier
 ### Preparation of `Reference` folder. 
 
 ### Execution
+
+If you are on **Nextflow 25.02 to 25.10**, remember to set `NXF_SYNTAX_VERSION=v2` first.
+
 #### Local Execution (from cloned repository)
 
 ```bash

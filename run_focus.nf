@@ -10,28 +10,6 @@
 
 nextflow.enable.dsl = 2
 
-// Publish GWAS results when running this focused analysis workflow
-params.publish_gwas_results = true
-
-// ==================================================================================
-// Log Configuration
-// ==================================================================================
-log.info """\
- SNP-FOCUSED GWAS ANALYSIS
- ==========================================
- Focus plink input                : ${params.focus_plink_input}
- Focus covariate file             : ${params.focus_covar_file}
- Focus phenotype name             : ${params.focus_pheno_name}
- Focus strata file                : ${params.focus_strata_file ?: 'None (single analysis)'}
- Phenotype file                   : ${params.phenofile}
- Longitudinal analysis            : ${params.longitudinal_flag}
- Survival analysis                : ${params.survival_flag}
- Numeric covariates               : ${params.covar_numeric}
- Categorical covariates           : ${params.covar_categorical}
- Interaction covariate            : ${params.covar_interact ?: 'None'}
- Analysis name                    : ${params.analysis_name}
- """
-
 // ==================================================================================
 // Import Processes from Main Modules
 // ==================================================================================
@@ -134,6 +112,25 @@ process FILTER_BY_STRATA {
 // MAIN WORKFLOW
 // ==================================================================================
 workflow {
+    // Publish GWAS results when running this focused analysis workflow
+    params.publish_gwas_results = true
+
+    log.info """\
+ SNP-FOCUSED GWAS ANALYSIS
+ ==========================================
+ Focus plink input                : ${params.focus_plink_input}
+ Focus covariate file             : ${params.focus_covar_file}
+ Focus phenotype name             : ${params.focus_pheno_name}
+ Focus strata file                : ${params.focus_strata_file ?: 'None (single analysis)'}
+ Phenotype file                   : ${params.phenofile}
+ Longitudinal analysis            : ${params.longitudinal_flag}
+ Survival analysis                : ${params.survival_flag}
+ Numeric covariates               : ${params.covar_numeric}
+ Categorical covariates           : ${params.covar_categorical}
+ Interaction covariate            : ${params.covar_interact ?: 'None'}
+ Analysis name                    : ${params.analysis_name}
+ """
+
     
     // ================== Validate Inputs ==================
     if (!params.focus_plink_input || !params.focus_covar_file || !params.focus_pheno_name) {

@@ -13,33 +13,33 @@
 process CHECK_REFERENCES {
   label 'small'
   cache 'lenient'
-  publishDir "${GENOTYPES_DIR}/${params.genetic_cache_key}", mode: 'copy', overwrite: true, pattern: "references_ready.txt"
+  publishDir "${params.project_dir}/genotypes/${params.genetic_cache_key}", mode: 'copy', overwrite: true, pattern: "references_ready.txt"
   
   output:
     path "references_ready.txt", emit: references_flag
   
   script:
   // Check if RESOURCE_DIR is a GCS path
-  def isGCS = RESOURCE_DIR.startsWith('gs://')
+  def isGCS = params.reference_dir.startsWith('gs://')
   def checkCmd = isGCS ? 'gsutil -q stat' : 'test -f'
   def successCheck = isGCS ? '&& echo "exists"' : ''
   
   """
   echo "Checking reference genomes for assembly: ${params.assembly}" > references_ready.txt
-  echo "Reference directory: ${RESOURCE_DIR}" >> references_ready.txt
+  echo "Reference directory: ${params.reference_dir}" >> references_ready.txt
   echo "" >> references_ready.txt
   
   # Verify critical files exist
-  if ! ${checkCmd} "${RESOURCE_DIR}/Genome/hg38.fa.gz" ${successCheck} 2>/dev/null; then
-    echo "ERROR: hg38 reference genome not found at: ${RESOURCE_DIR}/Genome/hg38.fa.gz" | tee -a references_ready.txt
+  if ! ${checkCmd} "${params.reference_dir}/Genome/hg38.fa.gz" ${successCheck} 2>/dev/null; then
+    echo "ERROR: hg38 reference genome not found at: ${params.reference_dir}/Genome/hg38.fa.gz" | tee -a references_ready.txt
     echo "" | tee -a references_ready.txt
     echo "Please download references before running the pipeline:" | tee -a references_ready.txt
     echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
     exit 1
   fi
   
-  if ! ${checkCmd} "${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" ${successCheck} 2>/dev/null; then
-    echo "ERROR: hg38 reference index not found at: ${RESOURCE_DIR}/Genome/hg38.fa.gz.fai" | tee -a references_ready.txt
+  if ! ${checkCmd} "${params.reference_dir}/Genome/hg38.fa.gz.fai" ${successCheck} 2>/dev/null; then
+    echo "ERROR: hg38 reference index not found at: ${params.reference_dir}/Genome/hg38.fa.gz.fai" | tee -a references_ready.txt
     echo "" | tee -a references_ready.txt
     echo "Please download references before running the pipeline:" | tee -a references_ready.txt
     echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
@@ -50,24 +50,24 @@ process CHECK_REFERENCES {
   echo "✓ hg38.fa.gz.fai found" >> references_ready.txt
   
   if [ "${params.assembly}" != "hg38" ]; then
-    if ! ${checkCmd} "${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" ${successCheck} 2>/dev/null; then
-      echo "ERROR: ${params.assembly} reference genome not found at: ${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz" | tee -a references_ready.txt
+    if ! ${checkCmd} "${params.reference_dir}/Genome/${params.assembly}.fa.gz" ${successCheck} 2>/dev/null; then
+      echo "ERROR: ${params.assembly} reference genome not found at: ${params.reference_dir}/Genome/${params.assembly}.fa.gz" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
       echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
       exit 1
     fi
     
-    if ! ${checkCmd} "${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" ${successCheck} 2>/dev/null; then
-      echo "ERROR: ${params.assembly} reference index not found at: ${RESOURCE_DIR}/Genome/${params.assembly}.fa.gz.fai" | tee -a references_ready.txt
+    if ! ${checkCmd} "${params.reference_dir}/Genome/${params.assembly}.fa.gz.fai" ${successCheck} 2>/dev/null; then
+      echo "ERROR: ${params.assembly} reference index not found at: ${params.reference_dir}/Genome/${params.assembly}.fa.gz.fai" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
       echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
       exit 1
     fi
     
-    if ! ${checkCmd} "${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" ${successCheck} 2>/dev/null; then
-      echo "ERROR: Liftover chain file not found at: ${RESOURCE_DIR}/liftOver/${params.assembly}ToHg38.over.chain.gz" | tee -a references_ready.txt
+    if ! ${checkCmd} "${params.reference_dir}/liftOver/${params.assembly}ToHg38.over.chain.gz" ${successCheck} 2>/dev/null; then
+      echo "ERROR: Liftover chain file not found at: ${params.reference_dir}/liftOver/${params.assembly}ToHg38.over.chain.gz" | tee -a references_ready.txt
       echo "" | tee -a references_ready.txt
       echo "Please download references before running the pipeline:" | tee -a references_ready.txt
       echo "  bash bin/download_references.sh ${params.assembly} ${params.reference_dir}" | tee -a references_ready.txt
@@ -226,7 +226,7 @@ process GENETICQC {
 /* Process 1b - Variant Standardization for PLINK (per-chromosome, outputs to cache) */
 process GENETICQCPLINK {
   scratch true
-  storeDir "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${fileTag}"
+  storeDir { "${params.project_dir}/genotypes/${params.genetic_cache_key}/chromosomes/${fileTag}" }
   label 'two_cpu_large_mem'
 
   input:
@@ -311,7 +311,7 @@ process GENETICQCPLINK {
 
 process MERGER_CHUNKS {
   label 'large'
-  publishDir "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${mergelist.getSimpleName()}", mode: 'copy', overwrite: true
+  publishDir({ "${params.project_dir}/genotypes/${params.genetic_cache_key}/chromosomes/${mergelist.getSimpleName()}" }, mode: 'copy', overwrite: true)
 
   input:
     path mergelist
@@ -375,8 +375,8 @@ process MERGER_CHUNKS {
 
 process MERGER_CHRS {
   cache 'deep'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/merged_genotypes", mode: 'copy', overwrite: true, pattern: "*.{pgen,pvar,psam}"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/merge_all", mode: 'copy', overwrite: true, pattern: "*.log"
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/genetic_qc/merged_genotypes", mode: 'copy', overwrite: true, pattern: "*.{pgen,pvar,psam}"
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/genetic_qc/logs/merge_all", mode: 'copy', overwrite: true, pattern: "*.log"
   label 'large'
 
   input:
@@ -449,8 +449,8 @@ process LD_PRUNE_CHR {
 /* Simple QC without ancestry inference (for skip population splitting mode) */
 process SIMPLE_QC {
   cache 'deep'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.{h5,txt}"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.png"
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.{h5,txt}"
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.png"
   label 'medium'
   
   input:
@@ -473,8 +473,8 @@ process SIMPLE_QC {
 }
 
 process GWASQC {
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.h5"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/genetic_qc/sample_qc", mode: 'copy', overwrite: true, pattern: "*.h5"
+  publishDir "${params.project_dir}/analyses/${params.genetic_cache_key}/genetic_qc/sample_qc/plots", mode: 'copy', overwrite: true, pattern: "*.{html,png}"
   label 'large'
   
   input:

@@ -167,7 +167,7 @@ process GWASGALLOP {
     each phenoname
 
   output:
-    tuple env(KEY), path("*.gallop")
+    tuple env('KEY'), path("*.gallop")
 
   script:
     def m = []
@@ -208,7 +208,7 @@ process GWASCPH {
     each phenoname
 
   output:
-    tuple env(KEY), path("*.coxph")
+    tuple env('KEY'), path("*.coxph")
   
   script:
     def m = []

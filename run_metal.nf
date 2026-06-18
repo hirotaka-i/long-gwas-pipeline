@@ -16,26 +16,6 @@ nextflow.enable.dsl = 2
  *   --metal_prefix   Output prefix (default: "SURV_META")
  */
 
-params.metal_input  = params.metal_input ?: null
-params.metal_outdir = params.metal_outdir ?: "${launchDir}/metal_results"
-params.metal_prefix = params.metal_prefix ?: "SURV_META"
-
-if (!params.metal_input) {
-    error "Missing required parameter: --metal_input"
-}
-
-def inputPatterns = params.metal_input
-    .toString()
-    .split(',')
-    .collect { it.trim() }
-    .findAll { it }
-
-Channel
-    .fromPath(inputPatterns, checkIfExists: true)
-    .ifEmpty { error "No files matched --metal_input: ${params.metal_input}" }
-    .collect()
-    .set { metal_input_files_ch }
-
 process RUN_METAL {
     label 'medium'
     publishDir "${params.metal_outdir}", mode: 'copy', overwrite: true
@@ -123,5 +103,20 @@ METAL_EOF
 }
 
 workflow {
+  if (!params.metal_input) {
+    error "Missing required parameter: --metal_input"
+  }
+
+  def inputPatterns = params.metal_input
+    .toString()
+    .split(',')
+    .collect { it.trim() }
+    .findAll { it }
+
+  def metal_input_files_ch = Channel
+    .fromPath(inputPatterns, checkIfExists: true)
+    .ifEmpty { error "No files matched --metal_input: ${params.metal_input}" }
+    .collect()
+
     RUN_METAL(metal_input_files_ch)
 }

@@ -53,11 +53,15 @@ def main():
 
     # Read covariate and phenotype files
     print(f"Reading covariate file: {covarfile}")
-    cov = pd.read_csv(covarfile, sep='\t')
+    with open(covarfile, 'r') as f:
+        cov_delim = '\t' if '\t' in f.readline() else ','
+    cov = pd.read_csv(covarfile, sep=cov_delim)
     print(f"Covariates shape: {cov.shape}")
 
     print(f"Reading phenotype file: {phenofile}")
-    pheno = pd.read_csv(phenofile, sep='\t')
+    with open(phenofile, 'r') as f:
+        pheno_delim = '\t' if '\t' in f.readline() else ','
+    pheno = pd.read_csv(phenofile, sep=pheno_delim)
     print(f"Phenotype shape: {pheno.shape}")
     print(f"Phenotype column: {pheno_name}")
     print()

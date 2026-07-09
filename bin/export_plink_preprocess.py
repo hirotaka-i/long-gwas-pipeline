@@ -44,7 +44,9 @@ def main():
         covar_cat = args.covar_categorical.split() if args.covar_categorical else []
         interact_covar = args.covar_interact.strip()
         
-        d_pheno = pd.read_csv(args.phenofile, sep="\t", engine='c')
+        with open(args.phenofile, 'r') as f:
+            pheno_delim = '\t' if '\t' in f.readline() else ','
+        d_pheno = pd.read_csv(args.phenofile, sep=pheno_delim, engine='c')
         d_sample = pd.read_csv(args.samplelist, sep="\t", engine='c')
 
         # Normalize IID column name
@@ -52,6 +54,13 @@ def main():
             d_pheno.rename(columns={'#IID': 'IID'}, inplace=True)
         if '#IID' in d_sample.columns and 'IID' not in d_sample.columns:
             d_sample.rename(columns={'#IID': 'IID'}, inplace=True)
+
+        # Drop columns from d_sample that already exist in d_pheno (d_pheno takes precedence,
+        # as it may contain time-varying variables that differ from the static covariate file)
+        overlap_cols = [c for c in d_pheno.columns if c in d_sample.columns and c != 'IID']
+        if overlap_cols:
+            print(f"Dropping overlapping columns from sample list (kept from phenotype file): {overlap_cols}")
+            d_sample = d_sample.drop(columns=overlap_cols)
 
         d_result = pd.merge(d_pheno, d_sample, on='IID', how='inner')
         if d_result.shape[0] == 0:

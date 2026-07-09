@@ -67,8 +67,8 @@ process TABLEONE {
 
   input:
     path(analytical_set)
-    path(covarfile)
-    path(phenofile)
+    path covarfile, stageAs: 'covarfile_input.tsv'
+    path phenofile, stageAs: 'phenofile_input.tsv'
 
   output:
     path "table1_*.csv", optional: true

@@ -309,6 +309,34 @@ process GENETICQCPLINK {
   """
 }
 
+/* Validate all GENETICQC chunk status files before merging chromosomes */
+process CHECK_VCF_CHUNKS {
+  label 'small'
+
+  input:
+    path status_files
+
+  output:
+    path "vcf_chunks_validated.txt"
+
+  script:
+  """
+  failed=""
+  for f in ${status_files}; do
+    status=\$(awk -F'\t' '{print \$7}' "\$f" | head -1)
+    if [ "\$status" != "SUCCESS" ] && [ "\$status" != "EMPTY_OUTPUT" ]; then
+      failed="\$failed\n\$(cat \$f)"
+    fi
+  done
+  if [ -n "\$failed" ]; then
+    echo "ERROR: The following VCF chunks did not complete successfully:" >&2
+    printf "\$failed" >&2
+    exit 1
+  fi
+  echo "All VCF chunks validated successfully" > vcf_chunks_validated.txt
+  """
+}
+
 process MERGER_CHUNKS {
   label 'large'
   publishDir "${GENOTYPES_DIR}/${params.genetic_cache_key}/chromosomes/${mergelist.getSimpleName()}", mode: 'copy', overwrite: true
@@ -318,11 +346,13 @@ process MERGER_CHUNKS {
     path "*"
   output:
     tuple file("${fileTag}.psam"), file("${fileTag}.pgen"), file("${fileTag}.pvar"), file("${fileTag}.log"), emit: snpchunks_qc_merged
+    path "${fileTag}.status.txt", emit: merge_status
 
   script:
     fileTag = mergelist.getSimpleName()
     """
     set +x
+    START_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
     
     echo "=== MERGER_CHUNKS Debug Info ==="
     echo "Working directory: \$PWD"
@@ -370,6 +400,9 @@ process MERGER_CHUNKS {
         --threads ${task.cpus} \
         --out ${fileTag}
     fi
+
+    VARIANT_COUNT=\$(grep -vc "^#" ${fileTag}.pvar 2>/dev/null || echo 0)
+    echo -e "${fileTag}\t${fileTag}\tvcf_merged\t\${START_TIME}\t\$(date '+%Y-%m-%d %H:%M:%S')\t0\tSUCCESS\t\${VARIANT_COUNT}" > ${fileTag}.status.txt
     """
 }
 

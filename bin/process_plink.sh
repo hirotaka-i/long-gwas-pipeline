@@ -60,6 +60,7 @@ if grep -q "R2=" "${OUTPREFIX}_dedup.pvar" 2>/dev/null; then
            --make-pgen \
            --threads "$N" \
            --out "${OUTPREFIX}_dedup_r2filtered"
+    rm -f "${OUTPREFIX}_dedup".{pgen,pvar,psam,log}
     
     NUM_AFTER=$(grep -vc "^#" "${OUTPREFIX}_dedup_r2filtered.pvar" || echo 0)
     echo "[INFO] R2 filter: ${NUM_BEFORE} -> ${NUM_AFTER} variants (removed: $((NUM_BEFORE - NUM_AFTER)))"
@@ -82,6 +83,7 @@ if [[ "$ASSEMBLY" != "hg38" ]]; then
            --make-pgen \
            --threads "$N" \
            --out "${OUTPREFIX}_named"
+    rm -f "${WORKPFX}".{pgen,pvar,psam,log}
     
     # Prepare BED for liftOver (0-based, chr prefix for UCSC)
     awk 'BEGIN{OFS="\t"} !/^#/{
@@ -112,6 +114,8 @@ if [[ "$ASSEMBLY" != "hg38" ]]; then
            --make-pgen \
            --threads "$N" \
            --out "${OUTPREFIX}_hg38"
+    rm -f "${OUTPREFIX}_named".{pgen,pvar,psam,log}
+    rm -f "${OUTPREFIX}"_lift.* "${OUTPREFIX}"_keep.ids "${OUTPREFIX}"_update.*
     
     WORKPFX="${OUTPREFIX}_hg38"
     
@@ -127,6 +131,7 @@ else
            --make-pgen \
            --threads "$N" \
            --out "${OUTPREFIX}_hg38"
+    rm -f "${WORKPFX}".{pgen,pvar,psam,log} "${OUTPREFIX}_chr_update.txt"
     WORKPFX="${OUTPREFIX}_hg38"
 fi
 
@@ -140,6 +145,7 @@ plink2 --pfile "$WORKPFX" \
        --make-pgen \
        --threads "$N" \
        --out "${OUTPREFIX}_norm"
+rm -f "${WORKPFX}".{pgen,pvar,psam,log}
 
 # Step 4: geno 0.1 and convert to hard-call
 ## without this process, raw file has dosage and inconsistent with VCF-based processing)
@@ -148,9 +154,9 @@ plink2 --pfile "${OUTPREFIX}_norm" \
        --make-pgen \
        --threads "$N" \
        --out "${OUTPREFIX}_geno_hc"
+rm -f "${OUTPREFIX}_norm".{pgen,pvar,psam,log}
 
-
-# Step 4: Align REF/ALT to reference FASTA
+# Step 5: Align REF/ALT to reference FASTA
 echo "[INFO] Aligning REF/ALT to hg38 reference"
 plink2 --pfile "${OUTPREFIX}_geno_hc" \
        --fa "$FA_HG38" \
@@ -158,6 +164,7 @@ plink2 --pfile "${OUTPREFIX}_geno_hc" \
        --make-pgen \
        --threads "$N" \
        --out "${OUTPREFIX}_refalign"
+rm -f "${OUTPREFIX}_geno_hc".{pgen,pvar,psam,log}
 
 # Step 6: Set final variant IDs and output as pgen format (compatible with MERGER_CHRS)
 plink2 --pfile "${OUTPREFIX}_refalign" \
@@ -169,18 +176,6 @@ plink2 --pfile "${OUTPREFIX}_refalign" \
        --make-pgen \
        --threads "$N" \
        --out "${OUTPREFIX}_p1out"
+rm -f "${OUTPREFIX}_refalign".{pgen,pvar,psam,log}
 
 echo "[INFO] Complete: ${OUTPREFIX}_p1out.{pgen,pvar,psam}"
-
-# Cleanup intermediate files
-rm -f "${OUTPREFIX}_dedup".{pgen,pvar,psam} \
-      "${OUTPREFIX}_dedup_r2filtered".{pgen,pvar,psam} \
-      "${OUTPREFIX}_geno".{bed,bim,fam} \
-      "${OUTPREFIX}_named".{pgen,pvar,psam} \
-      "${OUTPREFIX}_hg38".{pgen,pvar,psam} \
-      "${OUTPREFIX}_refalign".{pgen,pvar,psam} \
-      "${OUTPREFIX}_norm".{pgen,pvar,psam} \
-      "${OUTPREFIX}"_lift.* \
-      "${OUTPREFIX}"_keep.ids \
-      "${OUTPREFIX}"_update.* \
-      "${OUTPREFIX}"_chr_update.txt

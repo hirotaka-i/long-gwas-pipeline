@@ -46,7 +46,7 @@ params.datetime = new java.text.SimpleDateFormat("YYYY-MM-dd'T'HHMMSS").format(d
 /* 
  * Import consolidated modules
  */
-include { CHECK_REFERENCES; SPLIT_VCF; GENETICQC; GENETICQCPLINK; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
+include { CHECK_REFERENCES; SPLIT_VCF; GENETICQC; CHECK_VCF_CHUNKS; GENETICQCPLINK; MERGER_CHUNKS; LD_PRUNE_CHR; MERGER_CHRS; SIMPLE_QC; GWASQC } from './modules/qc.nf'
 include { MAKEANALYSISSETS; COMPUTE_PCA; MERGE_PCA; HARMONIZE_CATEGORICAL_COVARS; RAWFILE_EXPORT; EXPORT_PLINK } from './modules/dataprep.nf'
 include { GWASGLM; GWASGALLOP; GWASCPH } from './modules/gwas.nf'
 include { SAVEGWAS; MANHATTAN; TABLEONE } from './modules/results.nf'
@@ -56,6 +56,10 @@ include { SAVEGWAS; MANHATTAN; TABLEONE } from './modules/results.nf'
  */
 Channel
   .fromPath("${params.project_dir}/genotypes/${params.genetic_cache_key}/chromosomes/*/*.{pgen,pvar,psam,log}", checkIfExists: false)
+  .filter{ f ->
+    def statusFile = file("${f.parent}/${f.parent.name}.status.txt")
+    statusFile.exists() && statusFile.text.contains('\tSUCCESS\t')
+  }
   .map{ f -> tuple(f.getSimpleName(), f) }
   .set{ cache }
 
@@ -184,7 +188,16 @@ workflow {
                             { fileTag, chunkId -> ["${fileTag}.mergelist.txt", chunkId] }
             .set{ chunknames }
 
-        MERGER_CHUNKS(chunknames, GENETICQC.out.snpchunks_merge.collect())
+        // Validate all chunks succeeded before merging
+        CHECK_VCF_CHUNKS(GENETICQC.out.chunk_status.map{ fileTag, chunkId, statusFile -> statusFile }.collect())
+
+        // Combine chunknames with validation flag to enforce ordering before merge
+        chunknames
+            .combine(CHECK_VCF_CHUNKS.out)
+            .map{ mergelist, flag -> mergelist }
+            .set{ validated_chunknames }
+
+        MERGER_CHUNKS(validated_chunknames, GENETICQC.out.snpchunks_merge.collect())
         
         // VCF merged output goes to chrsqced
         MERGER_CHUNKS.out

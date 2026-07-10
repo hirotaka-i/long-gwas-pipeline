@@ -10,8 +10,8 @@
 process SAVEGWAS {
   scratch true
   label 'two_cpu_large_mem'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}/split", mode: 'copy', overwrite: true, pattern: "*.{results,gallop,coxph}"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}", mode: 'copy', overwrite: true, pattern: "*_allresults.tsv"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}/split", mode: 'copy', overwrite: true, pattern: "*.{results,gallop,coxph}"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}", mode: 'copy', overwrite: true, pattern: "*_allresults.tsv"
 
   input:
     tuple val(pop_studyarm_pheno), path(sumstats)
@@ -44,7 +44,7 @@ process MANHATTAN {
   scratch true
   label 'two_cpu_large_mem'
 
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}/plots", mode: 'copy', overwrite: true
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/gwas_results/${model}/plots", mode: 'copy', overwrite: true
 
   input:
     each path(input_file)
@@ -63,7 +63,7 @@ process TABLEONE {
   scratch true
   label 'small'
   
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
 
   input:
     path(analytical_set)

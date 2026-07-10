@@ -14,7 +14,7 @@ process MAKEANALYSISSETS {
   scratch true
   label 'two_cpu_large_mem'
   cache 'deep'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
 
   input:
     path samplelist
@@ -32,8 +32,8 @@ process MAKEANALYSISSETS {
 process COMPUTE_PCA {
   scratch true
   label 'large'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/pca", mode: 'copy', overwrite: true, pattern: "*.{eigenvec,eigenval}"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.log"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/pca", mode: 'copy', overwrite: true, pattern: "*.{eigenvec,eigenval}"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.log"
 
   input:
     each path(samplelist)
@@ -77,7 +77,7 @@ process COMPUTE_PCA {
 process MERGE_PCA {
   scratch true
   label 'small'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true
   
   input:
     tuple path(samplelist), path(study_arm_pca)
@@ -111,9 +111,9 @@ process MERGE_PCA {
 process HARMONIZE_CATEGORICAL_COVARS {
   scratch true
   label 'small'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_filtered.pca.harmonized.tsv"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.cat_mapping.tsv"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.cat_summary.tsv"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_filtered.pca.harmonized.tsv"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.cat_mapping.tsv"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.cat_summary.tsv"
 
   input:
     each path(samplelist)
@@ -141,7 +141,7 @@ process HARMONIZE_CATEGORICAL_COVARS {
 process RAWFILE_EXPORT {
   scratch true
   label 'small'
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.log"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*.log"
 
   input:
     tuple val(fileTag), path(plinkFiles)
@@ -234,10 +234,10 @@ process EXPORT_PLINK {
   scratch true
   label 'small'
   
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_filtered.pca.pheno.tsv"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_covar_names.txt"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_n_covar.txt"
-  publishDir "${ANALYSES_DIR}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*_preprocessing.log"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_filtered.pca.pheno.tsv"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_covar_names.txt"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data", mode: 'copy', overwrite: true, pattern: "*_n_covar.txt"
+  publishDir "${params.analyses_dir}/${params.genetic_cache_key}/${params.analysis_name}/prepared_data/logs", mode: 'copy', overwrite: true, pattern: "*_preprocessing.log"
 
   input:
     path samplelist

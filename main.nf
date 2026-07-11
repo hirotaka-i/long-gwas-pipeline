@@ -200,7 +200,7 @@ workflow {
         MERGER_CHUNKS(validated_chunknames, GENETICQC.out.snpchunks_merge.collect())
         
         // VCF merged output goes to chrsqced
-        MERGER_CHUNKS.out
+        MERGER_CHUNKS.out.snpchunks_qc_merged
             .collect()
             .flatten()
             .map{ fn -> tuple(fn.getSimpleName(), fn) }

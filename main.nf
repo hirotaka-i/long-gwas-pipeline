@@ -6,6 +6,77 @@
 nextflow.enable.dsl = 2
 
 /*
+ * Validate required parameters up front so failures surface immediately, not deep in the DAG.
+ */
+def missingParams = []
+if (!params.input)     missingParams << '--input (path to genotype VCF/PLINK files)'
+if (!params.covarfile) missingParams << '--covarfile (path to covariates file)'
+if (!params.phenofile) missingParams << '--phenofile (path to phenotype file)'
+if (missingParams) {
+    error("Missing required parameter(s):\n" +
+          missingParams.collect { "  - ${it}" }.join('\n') +
+          "\nProvide them via -params-file or --param value. See conf/examples/ for templates.")
+}
+
+/*
+ * Validate that requested phenotype/covariate columns actually exist in the
+ * input files before running anything expensive.
+ */
+def readHeaderColumns(path, label) {
+    def line
+    try {
+        line = file(path).withReader { it.readLine() }
+    } catch (Exception e) {
+        error("Could not read ${label} '${path}': ${e.message}")
+    }
+    if (!line) {
+        error("${label} '${path}' appears to be empty (no header line found).")
+    }
+    return line.split('\t').collect { it.trim() } as Set
+}
+
+def phenoHeader = readHeaderColumns(params.phenofile, '--phenofile')
+def covarHeader = readHeaderColumns(params.covarfile, '--covarfile')
+
+def missingColumns = []
+
+(params.pheno_name ?: '').split(/\s+/).findAll { it }.each { col ->
+    if (!(col in phenoHeader)) missingColumns << "--pheno_name '${col}' not found in --phenofile columns"
+}
+
+def numericList = (params.covar_numeric ?: '').split(/\s+/).findAll { it }
+numericList.each { col ->
+    // PC1/PC2/... are computed later by COMPUTE_PCA, so skip checking them here.
+    if (!(col ==~ /(?i)^PC\d+$/) && !(col in covarHeader)) {
+        missingColumns << "--covar_numeric '${col}' not found in --covarfile columns"
+    }
+}
+
+(params.covar_categorical ?: '').split(/\s+/).findAll { it }.each { col ->
+    if (!(col in covarHeader)) missingColumns << "--covar_categorical '${col}' not found in --covarfile columns"
+}
+
+if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
+    missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
+}
+
+// Only meaningfully used for survival/longitudinal KM plots; don't require it for cross-sectional runs.
+if ((params.longitudinal_flag || params.survival_flag) && params.time_col && !(params.time_col in phenoHeader)) {
+    missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
+}
+
+if (params.covar_interact && !(params.covar_interact in numericList)) {
+    missingColumns << "--covar_interact '${params.covar_interact}' must also be listed in --covar_numeric"
+}
+
+if (missingColumns) {
+    error("Phenotype/covariate column validation failed:\n" +
+          missingColumns.collect { "  - ${it}" }.join('\n') +
+          "\n\nphenofile ('${params.phenofile}') columns found: ${phenoHeader.sort()}" +
+          "\ncovarfile ('${params.covarfile}') columns found: ${covarHeader.sort()}")
+}
+
+/*
  * Main workflow log
  */
 if (params.longitudinal_flag) {
@@ -65,6 +136,7 @@ Channel
 
 Channel
    .fromPath(params.input)
+   .ifEmpty { error("No genotype files matched --input: '${params.input}'. Check the path/glob is correct and reachable -- on Google Batch this must be a real gs:// URI.") }
    .map{ f -> tuple(f.getSimpleName(), f) }
    .set{ input_check_ch }
 
@@ -142,8 +214,8 @@ workflow {
         // Collect processing status for tracking
         GENETICQCPLINK.out.chunk_status
             .map{ fileTag, statusFile -> statusFile.text }
-            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
-                         storeDir: "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/",
+            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv",
+                         storeDir: "${params.analyses_dir}/${params.genetic_cache_key}/genetic_qc/logs/",
                          seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
                          newLine: false)
         
@@ -177,8 +249,8 @@ workflow {
         // Collect processing status for tracking
         GENETICQC.out.chunk_status
             .map{ fileTag, chunkId, statusFile -> statusFile.text }
-            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv", 
-                         storeDir: "${ANALYSES_DIR}/${params.genetic_cache_key}/genetic_qc/logs/",
+            .collectFile(name: "geneticqc_chunk_status_${params.datetime}.tsv",
+                         storeDir: "${params.analyses_dir}/${params.genetic_cache_key}/genetic_qc/logs/",
                          seed: "fileTag\tchunkId\tinput\tstart_time\tend_time\texit_code\tstatus\tvariants\n",
                          newLine: false)
 

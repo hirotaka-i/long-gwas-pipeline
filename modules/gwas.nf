@@ -19,12 +19,13 @@ process GWASGLM {
 
   output:
     path "*.results"
-    path "manifest.tsv"
-    // unlike other gwas processes, multiple phenotypes can processed together
-    // manifest.tsv maps each result file to its key (pop_studyarm_phenotype)
+    path "${outfile}.manifest.tsv"
+    // manifest maps each result file to its key (pop_studyarm_phenotype).
+    // Filename must be unique per task since all chromosomes share one publishDir.
 
   script:
-    def outfile = "${pop_studyarm}_${fileTag}"
+    // No `def` here -- output: needs outfile in the shared process scope.
+    outfile = "${pop_studyarm}_${fileTag}"
     // Convert phenonames to space-separated string for plink2
     // Handle both String and List input formats
     def pheno_list = phenonames instanceof List ? phenonames.join(' ') : phenonames.toString().replaceAll(/[\[\]'"]/, '').trim()
@@ -139,17 +140,17 @@ process GWASGLM {
     fi
 
     # Rename all phenotype output files to .results extension and create manifest
-    echo -e "key\tfilename" > manifest.tsv
+    echo -e "key\tfilename" > ${outfile}.manifest.tsv
     for result_file in ${outfile}.*.glm.{logistic.hybrid,linear}; do
         if [ -f "\${result_file}" ]; then
             new_name="\${result_file%.glm.*}.results"
             mv "\${result_file}" "\${new_name}"
-            
+
             # Extract phenotype name from filename
             # Pattern: pop_studyarm_fileTag.phenotype.results
             phenotype=\$(basename "\${new_name}" .results | rev | cut -d'.' -f1 | rev)
             key="${pop_studyarm}_\${phenotype}"
-            echo -e "\${key}\t\${new_name}" >> manifest.tsv
+            echo -e "\${key}\t\${new_name}" >> ${outfile}.manifest.tsv
         fi
     done
     """

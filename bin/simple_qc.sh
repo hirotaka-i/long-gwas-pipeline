@@ -60,7 +60,7 @@ plink2 --pfile ${GENO}_callrate_het \
 # Step 4: PCA calculation
 echo "Step 4: Computing PCA..."
 plink2 --pfile ${GENO}_callrate_het_king \
-       --pca \
+       --pca approx\
        --threads ${THREADS} \
        --out ${OUT}_pca
 

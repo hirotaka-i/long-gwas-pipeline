@@ -123,6 +123,12 @@ def main():
                             print(f"Standardized covariate: {col} (mean={covar_mean:.3f}, sd={covar_std:.3f})")
                         else:
                             print(f"Skipping standardization for {col} (constant variable)")
+
+        for col in covar_num:
+            if col in d_set.columns and d_set[col].isna().any():
+                n_missing = d_set[col].isna().sum()
+                d_set[col] = d_set[col].astype(object).where(d_set[col].notna(), 'NA')
+                print(f"Numeric covariate '{col}': filled {n_missing} missing values with 'NA'")
         
         # Skip standardization for categorical dummy variables (they're already 0/1)
         for dummy_col in categorical_dummies:
@@ -142,6 +148,10 @@ def main():
                     # Already in PLINK format, ensure missing is -9
                     d_set[pheno_col] = d_set[pheno_col].fillna(-9).astype(int)
                     print(f"Phenotype '{pheno_col}' already in PLINK format 1/2/-9")
+                elif d_set[pheno_col].isna().any():
+                    n_missing = d_set[pheno_col].isna().sum()
+                    d_set[pheno_col] = d_set[pheno_col].astype(object).where(d_set[pheno_col].notna(), 'NA')
+                    print(f"Quantitative phenotype '{pheno_col}': filled {n_missing} missing values with 'NA'")
         
         # Extract all covariate column names (numeric + categorical dummies)
         all_covar_cols = [col for col in d_set.columns if col not in ["IID"] + all_phenos]
@@ -168,7 +178,19 @@ def main():
         print(f"Covariate order: {covar_names_str}")
         
         # Save single file with all phenotypes (plink2 --glm handles missing phenotypes automatically)
-        d_set.to_csv(f"{args.outfile}_filtered.pca.pheno.tsv", sep="\t", index=False)
+        output_path = f"{args.outfile}_filtered.pca.pheno.tsv"
+        d_set.to_csv(output_path, sep="\t", index=False)
+
+        with open(output_path) as f:
+            header_fields = f.readline().rstrip('\n').split('\t')
+            expected_n = len(header_fields)
+            for lineno, line in enumerate(f, start=2):
+                n_fields = len(line.rstrip('\n').split('\t'))
+                if n_fields != expected_n:
+                    raise ValueError(
+                        f"{output_path} line {lineno} has {n_fields} tab-separated fields, "
+                        f"expected {expected_n} (header: {header_fields}). Offending line (truncated): {line[:200]!r}"
+                    )
         print(f"\nCreated {args.outfile}_filtered.pca.pheno.tsv with {d_set.shape[0]} samples")
         print(f"Phenotypes: {', '.join(all_phenos)}")
         for pheno_col in all_phenos:
@@ -179,8 +201,8 @@ def main():
                     # Binary phenotype in PLINK format: count only 1 and 2
                     n_valid = ((d_set[pheno_col] == 1) | (d_set[pheno_col] == 2)).sum()
                 else:
-                    # Quantitative phenotype: count non-missing
-                    n_valid = d_set[pheno_col].notna().sum()
+                    # Quantitative phenotype: count non-missing while excluding explicit NA tokens
+                    n_valid = (d_set[pheno_col].notna() & (d_set[pheno_col] != 'NA')).sum()
                 print(f"  {pheno_col}: {n_valid} samples with valid values")
         
         print()

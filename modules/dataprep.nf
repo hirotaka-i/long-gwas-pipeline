@@ -257,7 +257,7 @@ process EXPORT_PLINK {
 
     def pheno_name = "y"
     if (params.pheno_name != '') {
-      pheno_name = "${params.pheno_name}"
+      pheno_name = params.pheno_name.split(/[\s,]+/).collect{ it.trim() }.findAll{ it }.join(' ')
     }
 
     """

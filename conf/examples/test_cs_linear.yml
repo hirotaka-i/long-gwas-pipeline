@@ -7,7 +7,7 @@ covarfile: "${projectDir}/example/covariates.tsv"
 phenofile: "${projectDir}/example/phenotype.cs2.tsv"
 
 # Variable names in covariate/phenotype files
-pheno_name: "y y2"
+pheno_name: "y,y2"
 covar_numeric: "SEX age_at_baseline PC1 PC2 PC3"
 covar_categorical: "site specimen"
 study_arm_col: "study_arm"

@@ -35,12 +35,30 @@ def readHeaderColumns(path, label) {
     return line.split('\t').collect { it.trim() } as Set
 }
 
+def parsePhenoNames(value) {
+    (value ?: '').split(/[\s,]+/).collect { it.trim() }.findAll { it }
+}
+
+def countNonBinaryValues(path, colName) {
+    def lines = file(path).readLines()
+    if (lines.size() < 2) return 0
+    def header = lines[0].split('\t')
+    def idx = header.findIndexOf { it.trim() == colName }
+    if (idx < 0) return 0
+    def validValues = ['0', '1', '0.0', '1.0', '', 'NA', 'NaN'] as Set
+    return lines.drop(1).count { line ->
+        if (!line.trim()) return false
+        def fields = line.split('\t')
+        idx < fields.size() && !(fields[idx].trim() in validValues)
+    }
+}
+
 def phenoHeader = readHeaderColumns(params.phenofile, '--phenofile')
 def covarHeader = readHeaderColumns(params.covarfile, '--covarfile')
 
 def missingColumns = []
 
-(params.pheno_name ?: '').split(/\s+/).findAll { it }.each { col ->
+parsePhenoNames(params.pheno_name).each { col ->
     if (!(col in phenoHeader)) missingColumns << "--pheno_name '${col}' not found in --phenofile columns"
 }
 
@@ -60,9 +78,28 @@ if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
     missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
 }
 
-// Only meaningfully used for survival/longitudinal KM plots; don't require it for cross-sectional runs.
-if ((params.longitudinal_flag || params.survival_flag) && params.time_col && !(params.time_col in phenoHeader)) {
-    missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
+if (params.longitudinal_flag) {
+    if (!params.time_col) {
+        missingColumns << "--time_col must be set when longitudinal_flag is true"
+    } else if (!(params.time_col in phenoHeader)) {
+        missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns"
+    }
+}
+
+if (params.survival_flag) {
+    ['tstart', 'tend'].each { col ->
+        if (!(col in phenoHeader)) {
+            missingColumns << "--phenofile must contain a '${col}' column when survival_flag is true"
+        }
+    }
+    parsePhenoNames(params.pheno_name).each { col ->
+        if (col in phenoHeader) {
+            def badRows = countNonBinaryValues(params.phenofile, col)
+            if (badRows > 0) {
+                missingColumns << "--pheno_name '${col}' has ${badRows} row(s) with non-binary values; survival_flag requires 0/1"
+            }
+        }
+    }
 }
 
 if (params.covar_interact && !(params.covar_interact in numericList)) {
@@ -144,8 +181,7 @@ Channel
  * Get the phenotypes arg on a channel
  */
 Channel
-    .of(params.pheno_name)
-    .splitCsv(header: false)
+    .fromList(parsePhenoNames(params.pheno_name))
     .collect()
     .set{ phenonames }
 
@@ -475,7 +511,7 @@ workflow {
     // ==================================================================================
     // TABLE 1 AND DESCRIPTIVE STATISTICS
     // ==================================================================================
-    TABLEONE(MAKEANALYSISSETS.out.analytical_set, file(params.covarfile), file(params.phenofile))
+    TABLEONE(MAKEANALYSISSETS.out.analytical_set, file(params.covarfile), file(params.phenofile), phenonames)
 }
 
 /*

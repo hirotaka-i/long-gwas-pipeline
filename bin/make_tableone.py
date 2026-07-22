@@ -250,7 +250,7 @@ def main():
             print()
             
             # Save to current directory (Nextflow publishDir handles routing)
-            output_file = f"table1_{analysis_name}.csv"
+            output_file = f"table1_{analysis_name}_{pheno_name}.csv"
             table1.to_csv(output_file)
             print(f"Table 1 saved to: {output_file}")
             print()
@@ -337,7 +337,7 @@ def main():
                 plt.grid(True, alpha=0.3)
                 
                 # Save to current directory (Nextflow publishDir handles routing)
-                km_plot_file = f"{ancestry}_km_plot.png"
+                km_plot_file = f"{ancestry}_{pheno_name}_km_plot.png"
                 plt.savefig(km_plot_file, dpi=300, bbox_inches='tight')
                 print(f"\nKaplan-Meier plot saved to: {km_plot_file}")
                 plt.close()

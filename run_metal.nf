@@ -12,17 +12,33 @@ nextflow.enable.dsl = 2
  *  This pipeline adds A2 column based on A1 and REF/ALT
  *
  * Optional:
- *   --metal_outdir   Output directory (default: "${launchDir}/metal_results")
- *   --metal_prefix   Output prefix (default: "SURV_META")
+ *   --metal_outdir      Output directory (default: "${launchDir}/metal_results")
+ *   --metal_prefix      Output prefix (default: "SURV_META")
+ *   --metal_pheno_name  Comma-separated phenotype names. If set, input files are
+ *                       grouped by phenotype suffix (_<phenotype>_allresults.tsv)
+ *                       and one METAL run is launched per phenotype.
  */
 
-params.metal_input  = params.metal_input ?: null
-params.metal_outdir = params.metal_outdir ?: "${launchDir}/metal_results"
-params.metal_prefix = params.metal_prefix ?: "SURV_META"
+params.metal_input      = params.metal_input ?: null
+params.metal_outdir     = params.metal_outdir ?: "${launchDir}/metal_results"
+params.metal_prefix     = params.metal_prefix ?: "SURV_META"
+params.metal_pheno_name = params.metal_pheno_name ?: null
 
 if (!params.metal_input) {
     error "Missing required parameter: --metal_input"
 }
+
+def parsePhenoNames(value) {
+  (value ?: '').split(',').collect { it.trim() }.findAll { it }
+}
+
+def matchPhenoName(filename, names) {
+  def base = filename.replaceAll(/\.gz$/, '')
+  def matches = names.findAll { base.endsWith("_${it}_allresults.tsv") }
+  matches ? matches.max { it.length() } : null
+}
+
+def phenoNames = parsePhenoNames(params.metal_pheno_name)
 
 def inputPatterns = params.metal_input
     .toString()
@@ -33,29 +49,37 @@ def inputPatterns = params.metal_input
 Channel
     .fromPath(inputPatterns, checkIfExists: true)
     .ifEmpty { error "No files matched --metal_input: ${params.metal_input}" }
-    .collect()
-    .set { metal_input_files_ch }
+  .map { f ->
+    def pheno = phenoNames ? matchPhenoName(f.getName(), phenoNames) : ''
+    if (phenoNames && pheno == null) {
+      error "File does not match any --metal_pheno_name value (${phenoNames.join(', ')}): ${f}"
+    }
+    tuple(pheno, f)
+  }
+  .groupTuple()
+  .set { metal_input_groups_ch }
 
 process RUN_METAL {
     label 'medium'
     publishDir "${params.metal_outdir}", mode: 'copy', overwrite: true
 
     input:
-    path sumstats_files
+    tuple val(pheno), path(sumstats_files, stageAs: 'input??/*')
 
     output:
-    path "${params.metal_prefix}_metal_script.txt", emit: script
+    path "${prefix}_metal_script.txt", emit: script
     path "prepared/*.metal.tsv.gz", emit: prepared
-    path "${params.metal_prefix}_command.log", emit: log, optional: true
-    path "${params.metal_prefix}*", emit: results
+    path "${prefix}_command.log", emit: log, optional: true
+    path "${prefix}*", emit: results
 
     script:
+    prefix = pheno ? "${params.metal_prefix}_${pheno}" : params.metal_prefix
     """
     set -euo pipefail
 
     mkdir -p prepared
 
-    cat > ${params.metal_prefix}_metal_script.txt << 'METAL_EOF'
+    cat > ${prefix}_metal_script.txt << 'METAL_EOF'
 SCHEME STDERR
 GENOMICCONTROL OFF
 AVERAGEFREQ ON
@@ -76,7 +100,8 @@ METAL_EOF
 
     for f in ${sumstats_files}; do
       base=\$(basename "\$f")
-      out="prepared/\${base%.gz}.metal.tsv"
+      tag=\$(basename "\$(dirname "\$f")")
+      out="prepared/\${tag}_\${base%.gz}.metal.tsv"
 
       ( [[ "\$f" == *.gz ]] && zcat "\$f" || cat "\$f" ) | awk -v count_file="\${out}.counts" 'BEGIN{FS=OFS="\\t"; c_ref=0; c_alt=0}
         NR==1 {
@@ -105,23 +130,23 @@ METAL_EOF
 
       echo "[A2_BUILD] file=\$base A1_EQ_REF=\$a1_eq_ref A1_EQ_ALT=\$a1_eq_alt"
       gzip -f "\$out"
-      echo "PROCESS \${out}.gz" >> ${params.metal_prefix}_metal_script.txt
+      echo "PROCESS \${out}.gz" >> ${prefix}_metal_script.txt
     done
     
     echo "[A2_BUILD] total A1_EQ_REF=\$total_ref A1_EQ_ALT=\$total_alt"
 
-    cat >> ${params.metal_prefix}_metal_script.txt << METAL_EOF
-OUTFILE ${params.metal_prefix} .TBL
+    cat >> ${prefix}_metal_script.txt << METAL_EOF
+  OUTFILE ${prefix} .TBL
 ANALYZE HETEROGENEITY
 QUIT
 METAL_EOF
 
-    metal ${params.metal_prefix}_metal_script.txt
+    metal ${prefix}_metal_script.txt
     
-    cp .command.log ${params.metal_prefix}_command.log || true
+    cp .command.log ${prefix}_command.log || true
     """
 }
 
 workflow {
-    RUN_METAL(metal_input_files_ch)
+    RUN_METAL(metal_input_groups_ch)
 }

@@ -43,6 +43,8 @@ process GWASGLM {
     echo "Total covariates: \${N_COVAR}"
     echo "Processing phenotypes: ${pheno_list}"
 
+    awk -F'\t' 'NR==1{n=NF; next} NF!=n{print "ERROR: ${samplelist} line "NR" has "NF" fields, expected "n" (from header). Line (truncated): "substr(\$0,1,200); exit 1}' "${samplelist}"
+
     # Build FID/IID keep list from phenotype/covariate table using FID lookup from psam.
     make_keep_iid.py --input "${samplelist}" --output "${outfile}.keep.iid.tsv" --psam "${psam}"
     

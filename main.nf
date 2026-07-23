@@ -32,27 +32,42 @@ def readHeaderColumns(path, label) {
     if (!line) {
         error("${label} '${path}' appears to be empty (no header line found).")
     }
-    return line.split('\t').collect { it.trim() } as Set
+    def delim = line.contains('\t') ? '\t' : ','
+    return line.split(delim).collect { it.trim() } as Set
+}
+
+def detectDelimiter(path, label) {
+    def line
+    try {
+        line = file(path).withReader { it.readLine() }
+    } catch (Exception e) {
+        error("Could not read ${label} '${path}': ${e.message}")
+    }
+    if (!line) {
+        error("${label} '${path}' appears to be empty (no header line found).")
+    }
+    return line.contains('\t') ? '\t' : ','
 }
 
 def parsePhenoNames(value) {
     (value ?: '').split(/[\s,]+/).collect { it.trim() }.findAll { it }
 }
 
-def countNonBinaryValues(path, colName) {
+def countNonBinaryValues(path, colName, delim) {
     def lines = file(path).readLines()
     if (lines.size() < 2) return 0
-    def header = lines[0].split('\t')
+    def header = lines[0].split(delim)
     def idx = header.findIndexOf { it.trim() == colName }
     if (idx < 0) return 0
     def validValues = ['0', '1', '0.0', '1.0', '', 'NA', 'NaN'] as Set
     return lines.drop(1).count { line ->
         if (!line.trim()) return false
-        def fields = line.split('\t')
+        def fields = line.split(delim)
         idx < fields.size() && !(fields[idx].trim() in validValues)
     }
 }
 
+def phenoDelim = detectDelimiter(params.phenofile, '--phenofile')
 def phenoHeader = readHeaderColumns(params.phenofile, '--phenofile')
 def covarHeader = readHeaderColumns(params.covarfile, '--covarfile')
 
@@ -94,7 +109,7 @@ if (params.survival_flag) {
     }
     parsePhenoNames(params.pheno_name).each { col ->
         if (col in phenoHeader) {
-            def badRows = countNonBinaryValues(params.phenofile, col)
+            def badRows = countNonBinaryValues(params.phenofile, col, phenoDelim)
             if (badRows > 0) {
                 missingColumns << "--pheno_name '${col}' has ${badRows} row(s) with non-binary values; survival_flag requires 0/1"
             }

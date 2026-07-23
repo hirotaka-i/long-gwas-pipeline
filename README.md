@@ -175,7 +175,10 @@ The pipeline has pre-defined profiles for different execution environments. You 
 - `localtest`: Local execution with locally built Docker image (for development/testing)
 - `biowulf`: Biowulf cluster execution with Singularity
 - `biowulflocal`: Biowulf local execution without job submission
-- `gcb`: Google Cloud Batch execution (for Verily Workbench)
+- `gcb`: Google Cloud Batch execution (legacy Verily Workbench profile; retained for compatibility)
+- `gcb2`: Google Cloud Batch execution for gp2-release-terra style environments (legacy; retained for compatibility)
+- `gcb_final`: Recommended Google Cloud Batch profile (default tuning for Verily Workbench)
+- `gcb_scaleable`: Same as `gcb_final`, but scales key `maxForks` from `gcb_ssd_quota_gb` and `gcb_cpu_quota`
 
 These profiles can be customized in [conf/profiles/](conf/profiles/) folder.
 
@@ -292,7 +295,7 @@ cd ~/repos/long-gwas-pipeline
 
 git pull origin main  # Update to latest code
 
-wb nextflow run main.nf -profile gcb -params-file conf/examples/test_survival.yml -with-tower
+wb nextflow run main.nf -profile gcb_final -params-file conf/examples/test_survival.yml -with-tower
 ```
 
 
@@ -433,16 +436,20 @@ metal_prefix: "HY_SURV_META"
 
 Then run this command to execute the METAL meta-analysis:
 ```bash
-nextflow run metal.nf -profile gcb2 -params-file metal_surv.yml
+nextflow run run_metal.nf -profile gcb_final -params-file metal_surv.yml
 ```
 
 Or run directly:
 ```bash
-nextflow run metal.nf -profile gcb2 \
+nextflow run run_metal.nf -profile gcb_final \
   --metal_input "gs://bucket/path/EUR_*_SURV_results.tsv.gz,gs://bucket/path/AJ_*_SURV_results.tsv.gz" \
   --metal_outdir "gs://bucket/path/META/SURV" \
   --metal_prefix "HY_SURV_META"
 ```
+
+#### Cross-cohort meta-analysis
+
+If you need one METAL run per phenotype across multiple cohorts, set `--metal_pheno_name` as comma-separated values and point `--metal_input` at a glob that spans all cohorts. See `conf/examples/metal_cross_cohort.yml`.
 
 ## Troubleshooting
 

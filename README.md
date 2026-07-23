@@ -210,6 +210,15 @@ $STORE_ROOT/
     └── work/                            # Nextflow work directory (Can be deleted after project completion)
 ```
 
+**GWAS output folders (`results` vs `gwas_results`)**
+- Primary outputs: `analyses/${genetic_cache_key}/${analysis_name}/gwas_results/${model}/`
+  - Use this folder for downstream interpretation and reporting (`*_allresults.tsv`, plots, and split files by model).
+- Debug/intermediate outputs: `analyses/${genetic_cache_key}/${analysis_name}/results/`
+  - This folder contains GWAS engine-level files published directly from GWAS execution processes (e.g., per-chromosome/per-phenotype `.results` and manifest files) to aid debugging.
+  - These files are not re-read by `SAVEGWAS`; `SAVEGWAS` consumes in-memory Nextflow channels, then writes consolidated outputs to `gwas_results`.
+
+In short: check `gwas_results` first for analysis results; use `results` when troubleshooting.
+
 **Environment variables:**
 - `STORE_ROOT`: Root directory for all pipeline data - can be local path or GCS bucket (default: `$PWD`)
 - `PROJECT_NAME`: Unique identifier for your project (default: `unnamed_project`)

@@ -183,14 +183,19 @@ if (workflow.profile?.contains('gcb_final') || workflow.profile?.contains('gcb_s
     }
 
     if (detected) {
-        def mismatch = detected.ssd != (configuredSsd as int) || detected.cpu != (configuredCpu as int)
+        def overConfigured = (configuredSsd as int) > detected.ssd || (configuredCpu as int) > detected.cpu
+        def underUtilized  = detected.ssd > (configuredSsd as int) || detected.cpu > (configuredCpu as int)
+        def statusMsg = overConfigured
+            ? " WARNING: Pipeline allocation exceeds your GCP quota limit — you may hit CODE_GCE_QUOTA_EXCEEDED.\n Reduce gcb_ssd_quota_gb / gcb_cpu_quota, or request a quota increase."
+            : underUtilized
+                ? " Pipeline is using a conservative allocation (below your GCP quota limit).\n To increase parallelism, raise gcb_ssd_quota_gb / gcb_cpu_quota in your params file — but keep values below the limit shown above."
+                : " Pipeline allocation matches your GCP quota limit."
         log.info """\
- SSD: ${detected.ssd}GB | CPU: ${detected.cpu} cores (detected for region ${region})
-
- Current configuration:
-   gcb_ssd_quota_gb: ${configuredSsd}
-   gcb_cpu_quota: ${configuredCpu}
-${mismatch ? " NOTE: detected quota differs from configured values; consider --gcb_ssd_quota_gb ${detected.ssd} --gcb_cpu_quota ${detected.cpu} with -profile gcb_scaleable." : " Configured values match detected quota."}
+ GCP quota detected for region ${region}:
+   SSD limit : ${detected.ssd}GB  |  CPU limit : ${detected.cpu} cores
+ Pipeline allocation (-profile gcb_scaleable):
+   gcb_ssd_quota_gb : ${configuredSsd}  |  gcb_cpu_quota : ${configuredCpu}
+${statusMsg}
  """
     } else {
         log.info """\

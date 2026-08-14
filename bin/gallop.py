@@ -128,7 +128,7 @@ def preprocess(dp, dc, ds, covar_numeric=None, covar_categorical=None,
 
   freq = pd.DataFrame(index = ds.columns)
   n = len(id_in_study) * 2
-  allele_freq = ds.apply(lambda x: 1 - (x.sum() / (n - x.isna().sum())) )
+  allele_freq = ds.apply(lambda x: 1 - (x.sum() / (n - 2 * x.isna().sum())) )
   
   if MAF is not None:
     # drop variants that have MAF lower than specified
